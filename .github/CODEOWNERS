@@ -1,0 +1,27 @@
+# HR Platform CODEOWNERS
+
+# Default owners
+* @farhanbarkat @abdurlehman1-dev
+
+# Backend / API
+/apps/api/ @farhanbarkat @abdurlehman1-dev
+
+# Web application
+/apps/web/ @farhanbarkat @abdurlehman1-dev
+
+# Mobile application
+/apps/mobile/ @farhanbarkat @abdurlehman1-dev
+
+# Shared packages
+/packages/shared/ @farhanbarkat @abdurlehman1-dev
+
+# UI package
+/packages/ui/ @farhanbarkat @abdurlehman1-dev
+
+# Configuration
+/packages/config/ @farhanbarkat @abdurlehman1-dev
+
+# Root configuration
+/docker-compose.yml @farhanbarkat
+/package.json @farhanbarkat
+/turbo.json @farhanbarkat
