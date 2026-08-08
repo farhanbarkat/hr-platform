@@ -1,0 +1,39 @@
+# Dependencies & Node
+node_modules/
+.pnpm-store/
+
+# Build & Output Directories
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Generated Files & Bundles
+*.min.js
+*.min.css
+*.map
+
+# Mobile Native Builds
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/.expo/
+
+# Lockfiles (prettier formatted lockfiles can break or mess up diffs)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Public Assets & Static Media
+public/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.pdf
+
+# Environment & Log Files
+.env*
+*.log
