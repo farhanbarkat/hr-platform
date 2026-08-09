@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import companyRouter from './src/routes/company.routes.js';
+import authRouter from './src/routes/auth.routes.js';
 
 const app = express();
 
@@ -10,5 +11,5 @@ app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 
 // Base API Routes
 app.use('/api/v1/companies', companyRouter);
-
+app.use('/api/v1/auth', authRouter);
 export default app;
