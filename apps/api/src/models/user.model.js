@@ -32,6 +32,20 @@ const userSchema = new mongoose.Schema(
       ref: 'Employee',
       default: null,
     },
+    twoFactorSecret: {
+      type: String,
+      select: false,
+    },
+    isTwoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    twoFactorRecoveryCodes: [
+      {
+        codeHash: { type: String, required: true },
+        used: { type: Boolean, default: false },
+      },
+    ],
     refreshTokens: [
       {
         tokenHash: { type: String, required: true },
@@ -52,27 +66,24 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return ;
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 12);
-  
 });
 
-// Password verification method
 userSchema.methods.isPasswordCorrect = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Check if account is currently locked (5 failed attempts within 15 mins)
 userSchema.methods.isLocked = function () {
   return !!(this.lockUntil && this.lockUntil > Date.now());
 };
 
-// Exclude sensitive credentials on JSON output
 userSchema.set('toJSON', {
   transform: (doc, ret) => {
     delete ret.password;
+    delete ret.twoFactorSecret;
+    delete ret.twoFactorRecoveryCodes;
     delete ret.refreshTokens;
     delete ret.failedLoginAttempts;
     delete ret.lockUntil;
