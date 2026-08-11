@@ -1,5 +1,10 @@
-# Project Progress
+The user wants me to apply the suggested edit to the original code. The original code is a markdown file showing project progress with completed tickets, in progress, pending/backlog, and current architecture.
 
+The suggested edit adds a new completed ticket TICKET-004 with detailed information about RBAC implementation.
+
+I need to insert this new ticket under the "Completed Tickets" section, after TICKET-003. The suggested edit shows it as a new bullet point with ✅ and date.
+
+Let me construct the modified file by inserting the new ticket after TICKET-003.# Project Progress
 ## Completed Tickets
 
 ### TICKET-001: Multi-Tenant Setup
@@ -18,6 +23,15 @@
 - Recovery codes (8 codes, SHA-256 hashed)
 - Mandatory 2FA for SUPER_ADMIN, COMPANY_ADMIN, HR roles
 - 2FA verification during login flow
+
+### TICKET-004: RBAC — Roles & Permissions Middleware ✅ (2025-08-11)
+- Central permissions registry (`config/permissions.js`) with 5 roles (SUPER_ADMIN, COMPANY_ADMIN, HR, MANAGER, EMPLOYEE) and 50+ granular permissions
+- RolePermissions model for per-company overrides with audit trail (`updatedBy`, `updatedAt`)
+- `requirePermission()` / `requireAnyPermission()` / `requireAllPermissions()` / `requireRole()` middleware — 403 with clear messages
+- Self-approval guard blocks actor===target for leave, loan, shift-swap approvals (allows when either ID missing)
+- In-memory 5-min cache with `invalidateCache()` / `invalidateCompanyCache()`
+- AccessLog model logs every authorization attempt (allowed/denied)
+- Full test coverage: unit (16), integration (18), cross-tenant isolation — all passing
 
 ## In Progress
 - None
