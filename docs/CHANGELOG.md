@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Documentation files: PROGRESS.md, DECISIONS.md, Architecture.md, PRD.md, Feature_Tickets.md, TESTING.md, CHANGELOG.md
+- TICKET-004: Permission-based RBAC with 5 roles, 50+ granular permissions (`payroll.approve`, `leave.approve_manager`, `employee.manage`, etc.)
+- `requirePermission()`, `requireAnyPermission()`, `requireAllPermissions()`, `requireRole()` Express middlewares — 403 with clear messages
+- Self-approval prevention guard at middleware/service layer (blocks actor===target for leave, loan, shift-swap)
+- RolePermissions collection for per-company permission overrides (stored with `updatedBy` audit field)
+- AccessLog model — logs every authz attempt (actor, permission, allowed/denied, resourceType, targetEmployeeId, reason)
+- 5-minute in-memory permission cache with explicit invalidation (`invalidateCache`, `invalidateCompanyCache`) — *not in original ticket spec; see DEC-009*
 
 ## [0.1.0] - 2024-01-XX
 

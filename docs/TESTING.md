@@ -1,4 +1,4 @@
-# Testing Documentation
+"# Testing Documentation
 
 ## Test Structure
 - **Unit tests:** `apps/api/src/**/*.test.js` — service layer business logic
@@ -33,9 +33,32 @@
 - **Run:** `npm test -- --testPathPattern=auth-2fa`
 - **Status:** Passing (as of 2024)
 
-### TICKET-004: Employee Model & CRUD
-- **Test files:** Not yet created
-- **Status:** Not started
+### TICKET-004: RBAC — Roles & Permissions Middleware
+- **Test files:** 
+  - `apps/api/src/services/rbac.service.test.js` (unit)
+  - `apps/api/tests/integration/rbac.middleware.test.js` (integration)
+  - `apps/api/tests/tenant-isolation/rbac.test.js` (cross-tenant isolation)
+  - `apps/web/src/hooks/usePermissions.test.tsx` (frontend hook)
+  - `apps/web/src/components/ProtectedRoute.test.tsx` (frontend route guard)
+- **Covers:**
+  - `getUserPermissions()` — default role permissions, company-specific overrides, 5-min in-memory caching, DB-error fallback to defaults
+  - `hasPermission()`, `hasAllPermissions()`, `hasAnyPermission()` — permission resolution logic
+  - `checkSelfApproval()` — blocks actor===target, allows when either ID missing (edge cases)
+  - `invalidateCache()` / `invalidateCompanyCache()` — cache invalidation on override updates
+  - Middleware: `requirePermission`, `requireAnyPermission`, `requireAllPermissions`, `requireRole` — 403 on missing permission, 401 on invalid/missing token, self-approval denial with reason
+  - Cross-tenant isolation: per-company permission resolution, separate audit logs per company
+  - Access logging: allowed/denied attempts logged with actor, permission, resourceType, targetEmployeeId, reason
+- **Run:**
+  ```bash
+  # From repo root
+  cd apps/api
+  $env:NODE_OPTIONS=\"--experimental-vm-modules\"; npx jest --testPathPattern=rbac.service.test
+  $env:NODE_OPTIONS=\"--experimental-vm-modules\"; npx jest --testPathPattern=rbac.middleware.test
+  $env:NODE_OPTIONS=\"--experimental-vm-modules\"; npx jest --testPathPattern=tenant-isolation/rbac
+  # Or all RBAC tests at once:
+  $env:NODE_OPTIONS=\"--experimental-vm-modules\"; npx jest --testPathPattern=rbac
+  ```
+- **Status:** Passing (as of 2025-08-11) — 34 tests total (16 unit + 18 integration)
 
 ### TICKET-005: Company Settings UI
 - **Test files:** Not yet created (frontend)
@@ -56,4 +79,4 @@ npm test -- --testPathPattern=<pattern>  # Specific pattern
 2. Create API integration tests in `tests/integration/<feature>.test.js`
 3. Create cross-tenant isolation test in `tests/tenant-isolation/<feature>.test.js`
 4. Run and verify all pass
-5. Update this file with the new entry
+5. Update this file with the new entry"
