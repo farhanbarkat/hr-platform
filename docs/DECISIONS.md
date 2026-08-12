@@ -39,3 +39,8 @@
 **Date:** 2024
 **Decision:** Per Frontend Spec: IBM Plex Sans for display/body, IBM Plex Mono for numeric data; Timecard Brass (#B9812E) as sole brand accent; semantic colors for status only; notched stat card as signature element.
 **Reason:** Functional legibility for data-dense operational tool; distinct visual identity tied to 'timecard/ledger' metaphor without gimmickry.
+
+## DEC-009: RBAC Permission Cache — In-Memory with Explicit Invalidation
+**Date:** 2025-08-11
+**Decision:** Implement a 5-minute in-memory cache for resolved user permissions in `RBACService` with explicit invalidation methods (`invalidateCache`, `invalidateCompanyCache`). Not in original TICKET-004 spec; added to reduce DB load on permission checks.
+**Reason:** Permission checks occur on every protected request. Cache avoids repeated RolePermissions lookups. Explicit invalidation on override updates ensures consistency. 5-min TTL balances performance with staleness risk.

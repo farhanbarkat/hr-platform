@@ -1,3 +1,4 @@
+
 # API Specification — Frontend Integration Reference
 
 > **Rule:** All third-party calls happen server-side. Frontend only calls internal `/api/v1/*` endpoints.
@@ -207,6 +208,7 @@
 **Purpose:** Update company settings (COMPANY_ADMIN only)
 
 **Headers:** `Authorization: Bearer <accessToken>`
+**Required Permissions:** `company.update` or `company.configure`
 
 **Request (partial allowed):**
 ```json
@@ -233,6 +235,11 @@
 ### Worksites (nested in company settings)
 
 #### POST /company/worksites
+**Purpose:** Add a new worksite (geofence location)
+
+**Headers:** `Authorization: Bearer <accessToken>`
+**Required Permissions:** `company.manage_worksites`
+
 **Request:**
 ```json
 {
@@ -244,8 +251,69 @@
 }
 ```
 
+**Response:**
+```json
+{
+  "statusCode": 201,
+  "data": { "_id": "...", "name": "Factory Unit 2", "address": "...", "lat": 31.5210, "lng": 74.3590, "radiusMeters": 150 },
+  "message": "Worksite created.",
+  "success": true
+}
+```
+
 #### PUT /company/worksites/:worksiteId
+**Purpose:** Update a worksite
+
+**Headers:** `Authorization: Bearer <accessToken>`
+**Required Permissions:** `company.manage_worksites`
+
+**Request:**
+```json
+{
+  "name": "Factory Unit 2 (Updated)",
+  "radiusMeters": 200
+}
+```
+
 #### DELETE /company/worksites/:worksiteId
+**Purpose:** Delete a worksite
+
+**Headers:** `Authorization: Bearer <accessToken>`
+**Required Permissions:** `company.manage_worksites`
+
+**Response:**
+```json
+{
+  "statusCode": 200,
+  "data": {},
+  "message": "Worksite deleted.",
+  "success": true
+}
+```
+
+---
+
+## RBAC & Permissions (Reference)
+
+### Permission Format
+All permissions follow the format: `resource.action`
+
+Examples: `leave.approve_manager`, `payroll.run`, `employee.manage`, `company.configure`
+
+### Role Hierarchy
+```
+SUPER_ADMIN > COMPANY_ADMIN > HR > MANAGER > EMPLOYEE
+```
+
+### Default Permissions by Role
+
+| Role | Key Permissions |
+|------|-----------------|
+| SUPER_ADMIN | All permissions across all companies |
+| COMPANY_ADMIN | All permissions within their company |
+| HR | Payroll (read, approve, run, export), Leave (full), Employee (manage), Attendance (manage), Finance (approve expenses/advances/loans) |
+| MANAGER | Leave (approve_manager), Team attendance, Task management, Team expense approval |
+| EMPLOYEE | Own leave, own attendance, own tasks, own expenses, view own payslip |
 
 ---
 

@@ -40,7 +40,22 @@
 
 ---
 
-## TICKET-004: Employee Model & CRUD 📋 NEXT
+## TICKET-004: RBAC — Roles & Permissions Middleware ✅ DONE
+**Branch:** `feature/ticket-004-rbac`
+**PR:** #TBD
+**Status:** Merged to develop
+**Acceptance Criteria:**
+- [x] Central permissions registry (`config/permissions.js`) with 5 roles (SUPER_ADMIN, COMPANY_ADMIN, HR, MANAGER, EMPLOYEE) and 50+ granular permissions
+- [x] RolePermissions model for per-company overrides with audit trail (`updatedBy`, `updatedAt`)
+- [x] `requirePermission()` / `requireAnyPermission()` / `requireAllPermissions()` / `requireRole()` middleware — 403 with clear messages
+- [x] Self-approval guard blocks actor===target for leave, loan, shift-swap approvals (allows when either ID missing)
+- [x] In-memory 5-min cache with `invalidateCache()` / `invalidateCompanyCache()`
+- [x] AccessLog model logs every authorization attempt (allowed/denied)
+- [x] Full test coverage: unit (16), integration (18), cross-tenant isolation — all passing
+
+---
+
+## TICKET-005: Employee Model & CRUD 📋 NEXT
 **Status:** Not started
 **Priority:** High
 **Acceptance Criteria:**
@@ -53,7 +68,7 @@
 
 ---
 
-## TICKET-005: Company Settings UI 📋 PLANNED
+## TICKET-006: Company Settings UI 📋 PLANNED
 **Status:** Not started
 **Priority:** High
 **Acceptance Criteria:**
@@ -65,7 +80,7 @@
 
 ---
 
-## TICKET-006: Attendance Module 📋 PLANNED
+## TICKET-007: Attendance Module 📋 PLANNED
 **Status:** Not started
 **Priority:** High
 **Acceptance Criteria:**
@@ -79,7 +94,7 @@
 
 ---
 
-## TICKET-007: Leave Module 📋 PLANNED
+## TICKET-008: Leave Module 📋 PLANNED
 **Status:** Not started
 **Priority:** High
 **Acceptance Criteria:**
@@ -92,7 +107,7 @@
 
 ---
 
-## TICKET-008: Payroll Module 📋 PLANNED
+## TICKET-009: Payroll Module 📋 PLANNED
 **Status:** Not started
 **Priority:** Medium
 **Acceptance Criteria:**
@@ -105,7 +120,7 @@
 
 ---
 
-## TICKET-009: Finance Module 📋 PLANNED
+## TICKET-010: Finance Module 📋 PLANNED
 **Status:** Not started
 **Priority:** Medium
 **Acceptance Criteria:**
@@ -117,7 +132,7 @@
 
 ---
 
-## TICKET-010: Tasks Module 📋 PLANNED
+## TICKET-011: Tasks Module 📋 PLANNED
 **Status:** Not started
 **Priority:** Medium
 **Acceptance Criteria:**
