@@ -29,12 +29,31 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    const decoded = verifyToken(
-      token,
-      process.env.JWT_ACCESS_SECRET,
-      TOKEN_TYPES.ACCESS
-    );
+    let decoded;
+
+    // First try decoding standard access token
+    try {
+      decoded = verifyToken(
+        token,
+        process.env.JWT_ACCESS_SECRET,
+        TOKEN_TYPES.ACCESS
+      );
+    } catch (tokenUtilErr) {
+      // Fallback: If it's an impersonation token created via jwt.sign directly
+      decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      
+      // Ensure it's a valid impersonation token before letting it pass
+      if (!decoded.isImpersonating) {
+        throw tokenUtilErr;
+      }
+    }
+
+    // Attach decoded info to req
     req.user = decoded;
+    
+    // Set companyId context (if impersonating, use target company ID)
+    req.companyId = decoded.impersonatedCompanyId || decoded.companyId;
+
     next();
   } catch (error) {
     throw new ApiError(401, 'Unauthorized: Token expired or invalid.');
