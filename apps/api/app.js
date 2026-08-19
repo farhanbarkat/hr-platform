@@ -14,7 +14,8 @@ app.use(cookieParser());
 // Routers Import
 import authRouter from './src/routes/auth.routes.js';
 import superAdminRouter from './src/routes/superAdmin.routes.js';
-import employeeRouter from './src/routes/employee.routes.js'; // Demo route for Step 4
+import employeeRouter from './src/routes/employee.routes.js';
+import documentRouter from './src/routes/document.routes.js';
 
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
@@ -22,5 +23,7 @@ app.use('/api/v1/super-admin', superAdminRouter);
 
 // Protected tenant/company routes (with read-only guard applied)
 app.use('/api/v1/employees', enforceReadOnlyImpersonation, employeeRouter);
+// Route registration
+app.use('/api/v1/documents', documentRouter);
 
 export default app;
