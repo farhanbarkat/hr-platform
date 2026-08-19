@@ -3,6 +3,7 @@ import { User } from '../models/user.model.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import mongoose from 'mongoose';
 
 /**
  * @desc    Create Employee + Auth User Account (HR / Admin only)
@@ -152,6 +153,11 @@ export const getEmployees = asyncHandler(async (req, res) => {
 export const getEmployeeById = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user?.companyId;
   const { id } = req.params;
+
+  // 🛡️ Guard: Check valid 24-character ObjectId
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, `Invalid employee ID format: ${id}`);
+  }
 
   const employee = await Employee.findOne({ _id: id, companyId })
     .populate('managerId', 'firstName lastName email designation employeeId');
