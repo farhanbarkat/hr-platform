@@ -68,15 +68,49 @@ const companySchema = new mongoose.Schema(
         default: 15,
       },
 
+      attendance: {
+        shiftStart: {
+          type: String,
+          default: '09:00', // HH:mm format
+        },
+
+        shiftEnd: {
+          type: String,
+          default: '17:00', // HH:mm format
+        },
+
+        gracePeriodMinutes: {
+          type: Number,
+          default: 15,
+        },
+
+        standardShiftMinutes: {
+          type: Number,
+          default: 480, // 8 hours
+        },
+
+        halfDayThresholdMinutes: {
+          type: Number,
+          default: 240, // 4 hours minimum for half-day
+        },
+
+        overtimeMinimumMinutes: {
+          type: Number,
+          default: 30, // Minimum overtime to count
+        },
+      },
+
       leavePolicyDefaults: {
         annualQuota: {
           type: Number,
           default: 14,
         },
+
         casualQuota: {
           type: Number,
           default: 10,
         },
+
         sickQuota: {
           type: Number,
           default: 8,
