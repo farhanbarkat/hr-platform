@@ -17,6 +17,7 @@ import superAdminRouter from './src/routes/superAdmin.routes.js';
 import employeeRouter from './src/routes/employee.routes.js';
 import documentRouter from './src/routes/document.routes.js';
 import attendanceRouter from './src/routes/attendance.routes.js';
+import leaveRoutes from './src/routes/leave.routes.js';
 
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
@@ -28,6 +29,9 @@ app.use('/api/v1/employees', enforceReadOnlyImpersonation, employeeRouter);
 app.use('/api/v1/documents', documentRouter);
 
 app.use('/api/v1/attendance', attendanceRouter);
+
+// Route declaration
+app.use('/api/v1/leaves', leaveRoutes);
 
 
 

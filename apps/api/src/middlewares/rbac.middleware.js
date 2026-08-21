@@ -26,10 +26,16 @@ export const requirePermission = (permission, options = {}) => {
 
   return asyncHandler(async (req, res, next) => {
     const user = req.user;
-    const companyId = req.companyId;
+    // 💡 Fallback check: req.companyId ya user.companyId
+    const companyId = req.companyId || user?.companyId;
+    const userId = user?._id || user?.id;
 
-    if (!user || !companyId) {
-      throw new ApiError(401, 'Authentication required.');
+    if (!user || !userId) {
+      throw new ApiError(401, 'Authentication required: User not found.');
+    }
+
+    if (!companyId && user.role !== 'SUPER_ADMIN') {
+      throw new ApiError(401, 'Authentication required: Company context missing.');
     }
 
     // Check permission
@@ -37,12 +43,12 @@ export const requirePermission = (permission, options = {}) => {
 
     // Prepare log data
     const logData = {
-      companyId,
-      userId: user._id,
+      companyId: companyId || null,
+      userId,
       permission,
       allowed: hasPerm,
       resourceType,
-      resourceId: req.params.id || req.body._id || null,
+      // resourceId: req.params.id || req.body?._id || null,
       targetEmployeeId: getTargetEmployeeId ? getTargetEmployeeId(req) : null,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
@@ -67,7 +73,6 @@ export const requirePermission = (permission, options = {}) => {
         );
 
         if (!selfCheck.allowed) {
-          // Log the self-approval denial
           rbacService.logAccessAttempt({
             ...logData,
             allowed: false,
