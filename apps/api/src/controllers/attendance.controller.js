@@ -8,6 +8,7 @@ import {
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { validateGeofence } from '../utils/geo.helper.js';
 
 /**
  * Helper to resolve Employee for current user/request
@@ -49,8 +50,23 @@ export const checkIn = asyncHandler(async (req, res) => {
 
   const employee = await resolveEmployee(req, companyId);
   const checkInTime = req.body.checkInTime ? new Date(req.body.checkInTime) : new Date();
+  const checkInMethod = req.body.checkInMethod || (req.body.lat !== undefined ? 'GPS' : 'MANUAL');
 
-  // Compute date and lateness in Company Timezone
+  let locationData = { latitude: null, longitude: null, distanceMeters: null };
+
+  // 🛰️ Geofence Validation if GPS method used
+  if (checkInMethod === 'GPS' || req.body.lat !== undefined) {
+    const geoValidation = validateGeofence(req.body.lat, req.body.lng, company);
+    if (!geoValidation.isValid) {
+      throw new ApiError(403, `Geofence Validation Failed: ${geoValidation.reason}`);
+    }
+    locationData = {
+      latitude: Number(req.body.lat),
+      longitude: Number(req.body.lng),
+      distanceMeters: geoValidation.distanceMeters,
+    };
+  }
+
   const { dateStr, lateMinutes, status } = calculateCheckInMetrics({
     checkInDateObj: checkInTime,
     timezone,
@@ -58,7 +74,6 @@ export const checkIn = asyncHandler(async (req, res) => {
     graceMinutes: 15,
   });
 
-  // Check for duplicate check-in on the same calendar day
   const existingRecord = await AttendanceRecord.findOne({
     companyId,
     employeeId: employee._id,
@@ -77,7 +92,8 @@ export const checkIn = asyncHandler(async (req, res) => {
     employeeId: employee._id,
     date: dateStr,
     checkInTime,
-    checkInMethod: 'MANUAL',
+    checkInMethod,
+    checkInLocation: locationData,
     status,
     lateMinutes,
     notes: req.body.notes || '',
@@ -99,13 +115,27 @@ export const checkOut = asyncHandler(async (req, res) => {
 
   const employee = await resolveEmployee(req, companyId);
   const checkOutTime = req.body.checkOutTime ? new Date(req.body.checkOutTime) : new Date();
+  const checkOutMethod = req.body.checkOutMethod || (req.body.lat !== undefined ? 'GPS' : 'MANUAL');
+
+  let locationData = { latitude: null, longitude: null, distanceMeters: null };
+
+  if (checkOutMethod === 'GPS' || req.body.lat !== undefined) {
+    const geoValidation = validateGeofence(req.body.lat, req.body.lng, company);
+    if (!geoValidation.isValid) {
+      throw new ApiError(403, `Geofence Validation Failed: ${geoValidation.reason}`);
+    }
+    locationData = {
+      latitude: Number(req.body.lat),
+      longitude: Number(req.body.lng),
+      distanceMeters: geoValidation.distanceMeters,
+    };
+  }
 
   const { dateStr } = calculateCheckInMetrics({
     checkInDateObj: checkOutTime,
     timezone,
   });
 
-  // Find today's open attendance record
   const attendance = await AttendanceRecord.findOne({
     companyId,
     employeeId: employee._id,
@@ -113,24 +143,17 @@ export const checkOut = asyncHandler(async (req, res) => {
   });
 
   if (!attendance) {
-    throw new ApiError(
-      400,
-      `No check-in record found for today (${dateStr}). You must check in before checking out.`
-    );
+    throw new ApiError(400, `No check-in record found for today (${dateStr}).`);
   }
 
   if (attendance.checkOutTime) {
-    throw new ApiError(
-      409,
-      `Already checked out for today at ${attendance.checkOutTime.toISOString()}.`
-    );
+    throw new ApiError(409, `Already checked out for today at ${attendance.checkOutTime.toISOString()}.`);
   }
 
   if (checkOutTime <= attendance.checkInTime) {
-    throw new ApiError(400, 'Check-out time cannot be earlier than or equal to check-in time.');
+    throw new ApiError(400, 'Check-out time cannot be earlier than check-in time.');
   }
 
-  // Calculate early leave, overtime, and total duration
   const metrics = calculateCheckOutMetrics({
     checkInDateObj: attendance.checkInTime,
     checkOutDateObj: checkOutTime,
@@ -140,14 +163,11 @@ export const checkOut = asyncHandler(async (req, res) => {
   });
 
   attendance.checkOutTime = checkOutTime;
-  attendance.checkOutMethod = 'MANUAL';
+  attendance.checkOutMethod = checkOutMethod;
+  attendance.checkOutLocation = locationData;
   attendance.totalWorkingMinutes = metrics.totalWorkingMinutes;
   attendance.earlyLeaveMinutes = metrics.earlyLeaveMinutes;
   attendance.overtimeMinutes = metrics.overtimeMinutes;
-
-  if (req.body.notes) {
-    attendance.notes = attendance.notes ? `${attendance.notes} | ${req.body.notes}` : req.body.notes;
-  }
 
   await attendance.save();
 
