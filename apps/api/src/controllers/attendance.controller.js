@@ -2,9 +2,9 @@ import { AttendanceRecord } from '../models/attendance.model.js';
 import { Employee } from '../models/employee.model.js';
 import { Company } from '../models/company.model.js';
 import {
-  calculateCheckInMetrics,
-  calculateCheckOutMetrics,
-} from '../utils/attendance.helper.js';
+  calculateCheckIn,
+  calculateAttendanceRecord,
+} from '../services/attendanceCalculations.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -46,7 +46,10 @@ const resolveEmployee = async (req, companyId) => {
 export const checkIn = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user?.companyId;
   const company = await Company.findById(companyId);
-  const timezone = company?.timezone || 'Asia/Karachi';
+  const attendanceConfig = {
+    timezone: company?.timezone || 'Asia/Karachi',
+    ...(company?.settings?.attendance || {}),
+  };
 
   const employee = await resolveEmployee(req, companyId);
   const checkInTime = req.body.checkInTime ? new Date(req.body.checkInTime) : new Date();
@@ -54,7 +57,6 @@ export const checkIn = asyncHandler(async (req, res) => {
 
   let locationData = { latitude: null, longitude: null, distanceMeters: null };
 
-  // 🛰️ Geofence Validation if GPS method used
   if (checkInMethod === 'GPS' || req.body.lat !== undefined) {
     const geoValidation = validateGeofence(req.body.lat, req.body.lng, company);
     if (!geoValidation.isValid) {
@@ -67,11 +69,10 @@ export const checkIn = asyncHandler(async (req, res) => {
     };
   }
 
-  const { dateStr, lateMinutes, status } = calculateCheckInMetrics({
-    checkInDateObj: checkInTime,
-    timezone,
-    shiftStart: '09:00',
-    graceMinutes: 15,
+  // 🚀 Use Shared Calculation Service
+  const { dateStr, lateMinutes, status } = calculateCheckIn({
+    checkInTime,
+    config: attendanceConfig,
   });
 
   const existingRecord = await AttendanceRecord.findOne({
@@ -111,7 +112,10 @@ export const checkIn = asyncHandler(async (req, res) => {
 export const checkOut = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user?.companyId;
   const company = await Company.findById(companyId);
-  const timezone = company?.timezone || 'Asia/Karachi';
+  const attendanceConfig = {
+    timezone: company?.timezone || 'Asia/Karachi',
+    ...(company?.settings?.attendance || {}),
+  };
 
   const employee = await resolveEmployee(req, companyId);
   const checkOutTime = req.body.checkOutTime ? new Date(req.body.checkOutTime) : new Date();
@@ -131,9 +135,9 @@ export const checkOut = asyncHandler(async (req, res) => {
     };
   }
 
-  const { dateStr } = calculateCheckInMetrics({
-    checkInDateObj: checkOutTime,
-    timezone,
+  const { dateStr } = calculateCheckIn({
+    checkInTime: checkOutTime,
+    config: attendanceConfig,
   });
 
   const attendance = await AttendanceRecord.findOne({
@@ -154,12 +158,11 @@ export const checkOut = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Check-out time cannot be earlier than check-in time.');
   }
 
-  const metrics = calculateCheckOutMetrics({
-    checkInDateObj: attendance.checkInTime,
-    checkOutDateObj: checkOutTime,
-    timezone,
-    shiftEnd: '17:00',
-    standardShiftMinutes: 480,
+  // 🚀 Use Shared Calculation Service
+  const metrics = calculateAttendanceRecord({
+    checkInTime: attendance.checkInTime,
+    checkOutTime,
+    config: attendanceConfig,
   });
 
   attendance.checkOutTime = checkOutTime;
@@ -168,6 +171,7 @@ export const checkOut = asyncHandler(async (req, res) => {
   attendance.totalWorkingMinutes = metrics.totalWorkingMinutes;
   attendance.earlyLeaveMinutes = metrics.earlyLeaveMinutes;
   attendance.overtimeMinutes = metrics.overtimeMinutes;
+  attendance.status = metrics.status;
 
   await attendance.save();
 
@@ -175,7 +179,6 @@ export const checkOut = asyncHandler(async (req, res) => {
     new ApiResponse(200, attendance, 'Check-out recorded successfully.')
   );
 });
-
 /**
  * @desc    Get Attendance Records for Employee / HR Review
  * @route   GET /api/v1/attendance
