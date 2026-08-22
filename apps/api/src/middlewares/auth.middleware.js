@@ -80,3 +80,15 @@ export const verify2FAChallenge = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, '2FA challenge session expired. Please log in again.');
   }
 });
+
+export const authorizeRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      throw new ApiError(
+        403,
+        `Role (${req.user?.role || 'UNKNOWN'}) is not allowed to access this resource.`
+      );
+    }
+    next();
+  };
+};
