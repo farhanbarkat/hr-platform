@@ -1,7 +1,9 @@
+import salaryStructureRouter from './src/routes/salaryStructure.routes.js';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { enforceReadOnlyImpersonation } from './src/middlewares/readOnly.middleware.js';
+
 
 const app = express();
 
@@ -33,6 +35,7 @@ app.use('/api/v1/attendance', attendanceRouter);
 // Route declaration
 app.use('/api/v1/leaves', leaveRoutes);
 
-
+// Register under v1
+app.use('/api/v1/salaries', salaryStructureRouter);
 
 export default app;
