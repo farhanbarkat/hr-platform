@@ -1,4 +1,4 @@
- import mongoose, { Schema } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 const employeeSchema = new Schema(
   {
@@ -82,8 +82,30 @@ const employeeSchema = new Schema(
       enum: ['ACTIVE', 'PROBATION', 'ON_LEAVE', 'TERMINATED', 'RESIGNED'],
       default: 'PROBATION',
     },
+
+    basicSalary: {
+      type: Number,
+      default: 0,
+    },
+    salaryStructure: {
+      basicSalary: {
+        type: Number,
+        default: 0,
+      },
+      allowances: {
+        type: Number,
+        default: 0,
+      },
+      currency: {
+        type: String,
+        default: 'PKR',
+      },
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    strict: true,
+  }
 );
 
 // Compound Unique Indexes scoped by Company

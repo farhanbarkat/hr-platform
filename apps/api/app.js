@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { enforceReadOnlyImpersonation } from './src/middlewares/readOnly.middleware.js';
+import { errorHandler } from './src/middlewares/error.middleware.js';
 
 
 const app = express();
@@ -20,6 +21,7 @@ import employeeRouter from './src/routes/employee.routes.js';
 import documentRouter from './src/routes/document.routes.js';
 import attendanceRouter from './src/routes/attendance.routes.js';
 import leaveRoutes from './src/routes/leave.routes.js';
+import payrollRoutes from './src/routes/payroll.routes.js';
 
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
@@ -38,4 +40,7 @@ app.use('/api/v1/leaves', leaveRoutes);
 // Register under v1
 app.use('/api/v1/salaries', salaryStructureRouter);
 
+app.use('/api/v1/payroll', payrollRoutes);
+
+app.use(errorHandler);
 export default app;
