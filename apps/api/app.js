@@ -1,3 +1,5 @@
+import payslipRouter from './src/routes/payslip.routes.js';
+// (Agar app.js already src ke andar hai to path: './routes/payslip.routes.js')
 import salaryStructureRouter from './src/routes/salaryStructure.routes.js';
 import express from 'express';
 import cors from 'cors';
@@ -41,6 +43,8 @@ app.use('/api/v1/leaves', leaveRoutes);
 app.use('/api/v1/salaries', salaryStructureRouter);
 
 app.use('/api/v1/payroll', payrollRoutes);
+
+app.use('/api/v1/payslips', payslipRouter);
 
 app.use(errorHandler);
 export default app;
