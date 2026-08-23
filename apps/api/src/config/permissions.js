@@ -115,6 +115,15 @@ export const PERMISSIONS = {
     UPDATE: 'settings.update',
     MANAGE_INTEGRATIONS: 'settings.manage_integrations',
   },
+
+    // Calendar permissions
+  CALENDAR: {
+    READ: 'calendar.read',
+    CREATE_COMPANY: 'calendar.create_company',
+    CREATE_TEAM: 'calendar.create_team',
+    MANAGE: 'calendar.manage',
+  },
+
 };
 
 /**
@@ -133,6 +142,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...Object.values(PERMISSIONS.FINANCE),
     ...Object.values(PERMISSIONS.DOCUMENT),
     ...Object.values(PERMISSIONS.SETTINGS),
+
+    ...Object.values(PERMISSIONS.CALENDAR),
   ],
 
   COMPANY_ADMIN: [
@@ -146,6 +157,12 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...Object.values(PERMISSIONS.FINANCE),
     ...Object.values(PERMISSIONS.DOCUMENT),
     ...Object.values(PERMISSIONS.SETTINGS),
+
+    // Calendar permissions
+    PERMISSIONS.CALENDAR.READ,
+    PERMISSIONS.CALENDAR.CREATE_COMPANY,
+    PERMISSIONS.CALENDAR.CREATE_TEAM,
+    PERMISSIONS.CALENDAR.MANAGE,
   ],
 
   HR: [
@@ -189,6 +206,11 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.FINANCE.VIEW_DASHBOARD,
 
     PERMISSIONS.DOCUMENT.READ,
+
+    PERMISSIONS.CALENDAR.READ,
+    PERMISSIONS.CALENDAR.CREATE_COMPANY,
+    PERMISSIONS.CALENDAR.CREATE_TEAM,
+    PERMISSIONS.CALENDAR.MANAGE,
   ],
 
   MANAGER: [
@@ -223,6 +245,9 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.FINANCE.VIEW_OWN,
 
     PERMISSIONS.DOCUMENT.READ,
+
+    PERMISSIONS.CALENDAR.READ,
+    PERMISSIONS.CALENDAR.CREATE_TEAM,
   ],
 
   EMPLOYEE: [
@@ -249,6 +274,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 
     PERMISSIONS.DOCUMENT.UPLOAD,
     PERMISSIONS.DOCUMENT.VIEW_OWN,
+    
+    PERMISSIONS.CALENDAR.READ,
   ],
 };
 
