@@ -25,6 +25,7 @@ import documentRouter from './src/routes/document.routes.js';
 import attendanceRouter from './src/routes/attendance.routes.js';
 import leaveRoutes from './src/routes/leave.routes.js';
 import payrollRoutes from './src/routes/payroll.routes.js';
+import calendarRoutes from './src/routes/calendar.routes.js';
 
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
@@ -48,6 +49,8 @@ app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
 
 app.use('/api/v1/companies', companyRouter);
+
+app.use('/api/v1/calendar', calendarRoutes);
 
 app.use(errorHandler);
 export default app;
