@@ -1,3 +1,4 @@
+import companyRouter from './src/routes/company.routes.js';
 import payslipRouter from './src/routes/payslip.routes.js';
 // (Agar app.js already src ke andar hai to path: './routes/payslip.routes.js')
 import salaryStructureRouter from './src/routes/salaryStructure.routes.js';
@@ -45,6 +46,8 @@ app.use('/api/v1/salaries', salaryStructureRouter);
 app.use('/api/v1/payroll', payrollRoutes);
 
 app.use('/api/v1/payslips', payslipRouter);
+
+app.use('/api/v1/companies', companyRouter);
 
 app.use(errorHandler);
 export default app;
