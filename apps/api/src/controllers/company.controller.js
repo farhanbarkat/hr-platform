@@ -69,3 +69,34 @@ export const getCurrentCompany = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, company, 'Company details fetched from DB.'));
 });
+
+export const updateCompanySettings = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user?.companyId;
+
+  if (!companyId) {
+    throw new ApiError(400, 'Company ID not found in session.');
+  }
+
+  const { settings } = req.body;
+
+  const updateFields = {};
+  if (settings?.attendance) {
+    for (const [key, value] of Object.entries(settings.attendance)) {
+      updateFields[`settings.attendance.${key}`] = value;
+    }
+  }
+
+  const company = await Company.findByIdAndUpdate(
+    companyId,
+    { $set: updateFields },
+    { new: true, runValidators: true }
+  );
+
+  if (!company) {
+    throw new ApiError(404, 'Company not found.');
+  }
+
+  return res.status(200).json(
+    new ApiResponse(200, company, 'Company settings updated successfully.')
+  );
+});

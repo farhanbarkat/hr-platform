@@ -27,6 +27,10 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
   const company = await Company.findById(companyId);
   const { startDate, endDate, year, month } = run.period;
 
+  // Format dates to YYYY-MM-DD for matching AttendanceRecord.date
+  const startStr = new Date(startDate).toISOString().slice(0, 10);
+  const endStr = new Date(endDate).toISOString().slice(0, 10);
+
   // 1. Fetch all active employees
   const employees = await Employee.find({
     companyId,
@@ -37,7 +41,7 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
     throw new ApiError(400, 'No active employees found for payroll calculation.');
   }
 
-  // 2. Pre-flight Validation: Collect all missing data errors across all employees
+  // 2. Pre-flight Validation
   const validationErrors = [];
   const validEmployeeProfiles = [];
 
@@ -57,7 +61,6 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
     validEmployeeProfiles.push({ emp, basicSalary: Number(basicSalary), empName });
   }
 
-  // If ANY employee fails pre-flight validation, abort immediately and persist errors to DRAFT run
   if (validationErrors.length > 0) {
     run.status = 'DRAFT';
     run.validationErrors = validationErrors;
@@ -72,6 +75,7 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
 
   // 3. Calculation & Atomic Payslip Generation
   const standardWorkingDays = 30; // standard month baseline
+  const standardShiftHours = 8;
   const payslipBulkOps = [];
   let totalGrossSum = 0;
   let totalDeductionsSum = 0;
@@ -81,14 +85,15 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
     const { emp, basicSalary } = item;
     const allowances = Number(emp.salaryStructure?.allowances || 0);
 
-    // Fetch employee attendance for this exact month period
+    // Query attendance using string date match
     const attendanceRecords = await AttendanceRecord.find({
       companyId,
       employeeId: emp._id,
-      date: { $gte: startDate, $lte: endDate },
+      date: { $gte: startStr, $lte: endStr },
     });
 
     let lateMinutesTotal = 0;
+    let earlyLeaveMinutesTotal = 0;
     let overtimeMinutesTotal = 0;
     let presentDaysCount = 0;
     let absentDaysCount = 0;
@@ -97,30 +102,36 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
       if (record.status === 'PRESENT' || record.status === 'LATE') {
         presentDaysCount += 1;
         lateMinutesTotal += record.lateMinutes || 0;
+        earlyLeaveMinutesTotal += record.earlyLeaveMinutes || 0;
         overtimeMinutesTotal += record.overtimeMinutes || 0;
       } else if (record.status === 'HALF_DAY') {
         presentDaysCount += 0.5;
         absentDaysCount += 0.5;
+        lateMinutesTotal += record.lateMinutes || 0;
+        earlyLeaveMinutesTotal += record.earlyLeaveMinutes || 0;
       } else if (record.status === 'ABSENT') {
         absentDaysCount += 1;
       }
     }
 
-    // Mathematical calculations using standard hourly/minute breakdown
+    // Mathematical calculations
     const perDayRate = basicSalary / standardWorkingDays;
-    const perMinuteRate = perDayRate / 8 / 60; // 8 hours shift
+    const perMinuteRate = perDayRate / standardShiftHours / 60;
 
-    // Late penalty: standard per-minute deduction past grace
+    // TICKET-017 AC-2: Explicit itemized deductions for Late Arrival and Early Departure
     const lateDeduction = Number((lateMinutesTotal * perMinuteRate).toFixed(2));
+    const earlyLeaveDeduction = Number((earlyLeaveMinutesTotal * perMinuteRate).toFixed(2));
+    const totalLateAndEarlyDeductions = Number((lateDeduction + earlyLeaveDeduction).toFixed(2));
+
     const unpaidLeaveDeduction = Number((absentDaysCount * perDayRate).toFixed(2));
-    const overtimePay = Number((overtimeMinutesTotal * perMinuteRate * 1.5).toFixed(2)); // 1.5x OT rate
+    const overtimePay = Number((overtimeMinutesTotal * perMinuteRate * 1.5).toFixed(2));
 
     const taxPlaceholder = 0.0;
     const loanEmiPlaceholder = 0.0;
 
     const grossPay = Number((basicSalary + allowances + overtimePay).toFixed(2));
     const totalDeductions = Number(
-      (lateDeduction + unpaidLeaveDeduction + taxPlaceholder + loanEmiPlaceholder).toFixed(2)
+      (totalLateAndEarlyDeductions + unpaidLeaveDeduction + taxPlaceholder + loanEmiPlaceholder).toFixed(2)
     );
     const netPay = Math.max(0, Number((grossPay - totalDeductions).toFixed(2)));
 
@@ -144,7 +155,7 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
               grossPay: toDecimal128(grossPay),
             },
             deductions: {
-              lateDeductions: toDecimal128(lateDeduction),
+              lateDeductions: toDecimal128(totalLateAndEarlyDeductions),
               unpaidLeaveDeductions: toDecimal128(unpaidLeaveDeduction),
               taxPlaceholder: toDecimal128(taxPlaceholder),
               loanEmiPlaceholder: toDecimal128(loanEmiPlaceholder),
@@ -155,6 +166,7 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
               presentDays: presentDaysCount,
               absentDays: absentDaysCount,
               lateMinutes: lateMinutesTotal,
+              earlyLeaveMinutes: earlyLeaveMinutesTotal,
               overtimeMinutes: overtimeMinutesTotal,
               unpaidLeaveDays: absentDaysCount,
             },
@@ -170,7 +182,6 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
   try {
     await Payslip.bulkWrite(payslipBulkOps);
 
-    // Update payroll run status to CALCULATED
     run.status = 'CALCULATED';
     run.validationErrors = [];
     run.employeeCount = validEmployeeProfiles.length;
@@ -184,7 +195,6 @@ export const calculatePayrollRunOrchestrator = async (companyId, payrollRunId) =
       calculatedPayslipsCount: payslipBulkOps.length,
     };
   } catch (dbError) {
-    // Safety guarantee: If DB bulk write fails partway, keep run in DRAFT/FAILED status
     run.status = 'FAILED';
     await run.save();
     throw new ApiError(500, `Payroll calculation failed during payslip generation: ${dbError.message}`);

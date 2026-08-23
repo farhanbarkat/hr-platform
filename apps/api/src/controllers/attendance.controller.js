@@ -1,3 +1,4 @@
+import { NotificationService } from '../services/notification.service.js';
 import { AttendanceRecord } from '../models/attendance.model.js';
 import { Employee } from '../models/employee.model.js';
 import { Company } from '../models/company.model.js';
@@ -175,9 +176,20 @@ export const checkOut = asyncHandler(async (req, res) => {
 
   await attendance.save();
 
+  // 🚀 TICKET-017: Real-time Early Checkout Alert to Direct Manager
+  if (attendance.earlyLeaveMinutes > 0) {
+    await NotificationService.checkAndTriggerEarlyCheckoutAlert({
+      companyId: attendance.companyId,
+      employeeId: attendance.employeeId,
+      earlyLeaveMinutes: attendance.earlyLeaveMinutes,
+      checkOutTime: attendance.checkOutTime,
+    });
+  }
+
   return res.status(200).json(
     new ApiResponse(200, attendance, 'Check-out recorded successfully.')
   );
+
 });
 /**
  * @desc    Get Attendance Records for Employee / HR Review

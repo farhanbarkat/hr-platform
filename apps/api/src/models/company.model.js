@@ -98,6 +98,23 @@ const companySchema = new mongoose.Schema(
           type: Number,
           default: 30, // Minimum overtime to count
         },
+
+        // --- NAYE FIELDS FOR TICKET-017 (CONFIGURABLE DEDUCTION SETTINGS) ---
+        deductionCalculationMode: {
+          type: String,
+          enum: ['DYNAMIC_HOURLY', 'FIXED_RATE'],
+          default: 'DYNAMIC_HOURLY', // DYNAMIC: Base Salary ke hisab se hourly cut, FIXED: Niche diye rate ke hisab se
+        },
+
+        fixedDeductionRatePerHour: {
+          type: mongoose.Schema.Types.Decimal128,
+          default: mongoose.Types.Decimal128.fromString('0.00'),
+        },
+
+        earlyCheckoutAlertThresholdMinutes: {
+          type: Number,
+          default: 30, // Alert manager if checkout occurs >= 30 mins before shiftEnd
+        },
       },
 
       leavePolicyDefaults: {
