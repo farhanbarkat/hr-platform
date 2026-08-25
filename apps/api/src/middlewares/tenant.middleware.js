@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import redis from '../db/redis.js';
 import { Company } from '../models/company.model.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -5,7 +6,6 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 /**
  * Tenant Resolution Middleware with Redis Caching Layer
- * Resolves company context from authenticated user or impersonation header
  */
 export const tenantMiddleware = asyncHandler(async (req, res, next) => {
   // Pass unauthenticated or public routes
@@ -21,15 +21,22 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
     throw new ApiError(403, 'Access Denied: Missing tenant context.');
   }
 
+  // Validate ObjectId format
+  if (!mongoose.Types.ObjectId.isValid(resolvedCompanyId)) {
+    throw new ApiError(400, 'Invalid company context ID format.');
+  }
+
   const cacheKey = `tenant:${resolvedCompanyId}`;
 
-  // 1. Redis Cache Lookup (< 2ms response time)
+  // 1. Redis Cache Lookup
   try {
     const cachedTenant = await redis.get(cacheKey);
 
     if (cachedTenant) {
-      req.tenant = JSON.parse(cachedTenant);
-      req.companyId = resolvedCompanyId;
+      const parsed = JSON.parse(cachedTenant);
+      req.tenant = parsed;
+      req.company = parsed;
+      req.companyId = new mongoose.Types.ObjectId(resolvedCompanyId);
       return next();
     }
   } catch (redisErr) {
@@ -37,9 +44,7 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
   }
 
   // 2. Fallback to Database on Cache Miss
-  const company = await Company.findById(resolvedCompanyId)
-    .select('_id name currency defaultTimezone settings')
-    .lean();
+  const company = await Company.findById(resolvedCompanyId).lean();
 
   if (!company) {
     throw new ApiError(404, 'Invalid or deactivated company context.');
@@ -53,7 +58,8 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
   }
 
   req.tenant = company;
-  req.companyId = resolvedCompanyId;
+  req.company = company;
+  req.companyId = new mongoose.Types.ObjectId(resolvedCompanyId);
 
   next();
 });
