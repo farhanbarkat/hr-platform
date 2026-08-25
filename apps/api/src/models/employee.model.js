@@ -57,10 +57,11 @@ const employeeSchema = new Schema(
       required: true,
       trim: true,
     },
-    department: {
-      type: String,
-      required: true,
-      trim: true,
+    departmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    default: null,
+    index: true,
     },
     designation: {
       type: String,

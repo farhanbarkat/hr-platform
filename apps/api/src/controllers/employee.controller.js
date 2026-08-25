@@ -1,9 +1,11 @@
 import { Employee } from '../models/employee.model.js';
 import { User } from '../models/user.model.js';
+import { buildScopedFilter } from '../utils/scopeFilter.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import mongoose from 'mongoose';
+
 
 /**
  * @desc    Create Employee + Auth User Account (HR / Admin only)
@@ -117,13 +119,23 @@ export const createEmployee = asyncHandler(async (req, res) => {
  * @route   GET /api/v1/employees
  */
 export const getEmployees = asyncHandler(async (req, res) => {
+
+  // Permission / role based scoped filter
+  const scopedFilter = await buildScopedFilter(req);
+
   const companyId = req.companyId || req.user?.companyId;
+
   const { department, status, search, page = 1, limit = 20 } = req.query;
 
-  const query = { companyId };
+  const query = {
+    ...scopedFilter,
+    companyId,
+  };
 
   if (department) query.department = department;
+
   if (status) query.employmentStatus = status;
+
   if (search) {
     query.$or = [
       { firstName: { $regex: search, $options: 'i' } },
@@ -142,10 +154,18 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const total = await Employee.countDocuments(query);
 
   return res.status(200).json(
-    new ApiResponse(200, { employees, total, page: Number(page), limit: Number(limit) }, 'Employees retrieved successfully.')
+    new ApiResponse(
+      200,
+      {
+        employees,
+        total,
+        page: Number(page),
+        limit: Number(limit),
+      },
+      'Employees retrieved successfully.'
+    )
   );
 });
-
 /**
  * @desc    Get Single Employee Profile & Direct Reports Hierarchy
  * @route   GET /api/v1/employees/:id

@@ -26,10 +26,13 @@ import attendanceRouter from './src/routes/attendance.routes.js';
 import leaveRoutes from './src/routes/leave.routes.js';
 import payrollRoutes from './src/routes/payroll.routes.js';
 import calendarRoutes from './src/routes/calendar.routes.js';
+import departmentRouter from './src/routes/department.routes.js';
 
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/super-admin', superAdminRouter);
+
+app.use('/api/v1/departments', departmentRouter);
 
 // Protected tenant/company routes (with read-only guard applied)
 app.use('/api/v1/employees', enforceReadOnlyImpersonation, employeeRouter);
@@ -51,6 +54,7 @@ app.use('/api/v1/payslips', payslipRouter);
 app.use('/api/v1/companies', companyRouter);
 
 app.use('/api/v1/calendar', calendarRoutes);
+
 
 app.use(errorHandler);
 export default app;
