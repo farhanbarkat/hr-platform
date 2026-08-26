@@ -27,10 +27,12 @@ import leaveRoutes from './src/routes/leave.routes.js';
 import payrollRoutes from './src/routes/payroll.routes.js';
 import calendarRoutes from './src/routes/calendar.routes.js';
 import departmentRouter from './src/routes/department.routes.js';
+import superAdminAdvancedRouter from './src/routes/superAdminAdvanced.routes.js';
 
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/super-admin', superAdminRouter);
+app.use('/api/v1/super-admin/advanced', superAdminAdvancedRouter);
 
 app.use('/api/v1/departments', departmentRouter);
 
