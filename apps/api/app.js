@@ -31,6 +31,9 @@ import taskRoutes from './src/routes/task.routes.js';
 // Apply Read-Only Enforcer Globally after Auth parsing
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/super-admin', superAdminRouter);
+app.use('/api/v1/super-admin/advanced', superAdminAdvancedRouter);
+
+app.use('/api/v1/departments', departmentRouter);
 
 // Protected tenant/company routes (with read-only guard applied)
 app.use('/api/v1/employees', enforceReadOnlyImpersonation, employeeRouter);

@@ -165,12 +165,29 @@ export const requireAllPermissions = (permissions, options = {}) => {
 };
 
 /**
- * Middleware: requireRole(roles, options)
- * Convenience middleware for role-based checks (uses default role permissions)
- * @param {string|string[]} roles - Single role or array of allowed roles
+ * Middleware: requireRole(...args)
+ * Supports:
+ * - requireRole(['ADMIN', 'HR'])
+ * - requireRole('ADMIN', 'HR', 'MANAGER')
+ * - requireRole(['ADMIN', 'HR'], { resourceType: 'employee' })
+ * - requireRole('ADMIN', 'HR', { resourceType: 'employee' })
  */
-export const requireRole = (roles, options = {}) => {
-  const allowedRoles = Array.isArray(roles) ? roles : [roles];
+export const requireRole = (...args) => {
+  let options = {};
+  let roles = [];
+
+  // Check if the last argument is an options object (not an array, not a string)
+  if (
+    args.length > 0 &&
+    typeof args[args.length - 1] === 'object' &&
+    !Array.isArray(args[args.length - 1]) &&
+    args[args.length - 1] !== null
+  ) {
+    options = args.pop();
+  }
+
+  // Flatten all remaining role arguments
+  roles = args.flat().filter((r) => typeof r === 'string');
 
   return asyncHandler(async (req, res, next) => {
     const user = req.user;
@@ -179,21 +196,31 @@ export const requireRole = (roles, options = {}) => {
       throw new ApiError(401, 'Authentication required.');
     }
 
-    const hasRole = allowedRoles.includes(user.role);
+    const hasRole = roles.includes(user.role);
 
     if (!hasRole) {
-      rbacService.logAccessAttempt({
-        companyId: req.companyId,
-        userId: user._id,
-        permission: `role:${allowedRoles.join('|')}`, 
-        allowed: false,
-        resourceType: options.resourceType || 'other',
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        metadata: { role: user.role, requiredRoles: allowedRoles },
-      });
+      // Safely log access attempt without throwing if logger fails
+      try {
+        if (rbacService?.logAccessAttempt) {
+          await rbacService.logAccessAttempt({
+            companyId: req.companyId || user.companyId,
+            userId: user._id,
+            permission: `role:${roles.join('|')}`,
+            allowed: false,
+            resourceType: options.resourceType || 'other',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent'),
+            metadata: { role: user.role, requiredRoles: roles },
+          });
+        }
+      } catch (logErr) {
+        console.error('Failed to log access attempt:', logErr.message);
+      }
 
-      throw new ApiError(403, `Access denied: requires one of roles [${allowedRoles.join(', ')}]`);
+      throw new ApiError(
+        403,
+        `Access denied: requires one of roles [${roles.join(', ')}]`
+      );
     }
 
     next();

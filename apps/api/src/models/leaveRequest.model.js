@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { LeaveStatusHistory } from './leaveStatusHistory.model.js';
 
 const leaveRequestSchema = new mongoose.Schema(
   {
@@ -100,5 +101,55 @@ const leaveRequestSchema = new mongoose.Schema(
 
 leaveRequestSchema.index({ companyId: 1, employeeId: 1, status: 1 });
 leaveRequestSchema.index({ companyId: 1, status: 1 });
+
+// Cache previous status on document load
+leaveRequestSchema.post('init', function () {
+  this._originalStatus = this.status;
+});
+
+// Flag status changes prior to save
+leaveRequestSchema.pre('save', function () {
+  if (this.isModified('status')) {
+    this._statusChanged = true;
+    this._previousStatus = this.isNew ? 'NONE' : this._originalStatus || 'PENDING_MANAGER';
+  }
+});
+
+// Automated status transition audit creation
+leaveRequestSchema.post('save', async function (doc) {
+  if (doc._statusChanged) {
+    try {
+      let resolvedActor = null;
+      let resolvedNote = '';
+
+      if (doc.isNew) {
+        resolvedNote = doc.reason ? `Submitted: ${doc.reason}` : 'Leave request submitted';
+      } else if (doc.status === 'PENDING_HR') {
+        resolvedActor = doc.managerApprovedBy || null;
+        resolvedNote = doc.managerNotes || 'Approved by Manager, forwarded to HR';
+      } else if (doc.status === 'APPROVED') {
+        resolvedActor = doc.hrApprovedBy || doc.managerApprovedBy || null;
+        resolvedNote = doc.hrNotes || 'Leave request approved';
+      } else if (doc.status === 'REJECTED') {
+        resolvedActor = doc.rejectedBy || doc.hrApprovedBy || doc.managerApprovedBy || null;
+        resolvedNote = doc.rejectionReason || 'Leave request rejected';
+      } else if (doc.status === 'CANCELLED') {
+        resolvedNote = 'Leave request cancelled by employee';
+      }
+
+      await LeaveStatusHistory.create({
+        leaveRequestId: doc._id,
+        companyId: doc.companyId,
+        fromStatus: doc._previousStatus || 'NONE',
+        toStatus: doc.status,
+        actedBy: doc._actedBy || resolvedActor,
+        note: doc._statusNote || resolvedNote,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.error('Failed to log LeaveStatusHistory in post-save hook:', err.message);
+    }
+  }
+});
 
 export const LeaveRequest = mongoose.model('LeaveRequest', leaveRequestSchema);
