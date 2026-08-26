@@ -124,6 +124,15 @@ export const PERMISSIONS = {
     MANAGE: 'calendar.manage',
   },
 
+  // ... existing permissions
+  TASKS: {
+    READ: 'tasks.read',
+    CREATE: 'tasks.create',
+    ASSIGN_TEAM: 'tasks.assign_team',
+    UPDATE_STATUS: 'tasks.update_status',
+    DELETE: 'tasks.delete',
+  },
+
 };
 
 /**

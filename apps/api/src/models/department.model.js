@@ -12,20 +12,14 @@ const departmentSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Department name is required'],
       trim: true,
-      maxlength: [100, 'Department name cannot exceed 100 characters'],
     },
     code: {
       type: String,
-      trim: true,
+      required: [true, 'Department code is required'],
       uppercase: true,
-      default: null, // ya optional
-    },
-    description: {
-      type: String,
       trim: true,
-      default: '',
     },
-    headEmployeeId: {
+    headOfDepartment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
       default: null,
@@ -33,13 +27,11 @@ const departmentSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
-      index: true,
     },
   },
   { timestamps: true }
 );
 
-// Unique name per company
-departmentSchema.index({ companyId: 1, name: 1 }, { unique: true });
+departmentSchema.index({ companyId: 1, code: 1 }, { unique: true });
 
 export const Department = mongoose.model('Department', departmentSchema);
