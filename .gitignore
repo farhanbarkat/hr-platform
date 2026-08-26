@@ -1,0 +1,5 @@
+- `.continue/`
+- `test-nemotron.mjs`
+
+Looking at the original code, there's already a "Temporary files & Caches" section at the end with:
+node_modules

@@ -1,0 +1,31 @@
+{
+  "name": "hr-platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/farhanbarkat/hr-platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/farhanbarkat/hr-platform/issues"
+  },
+  "homepage": "https://github.com/farhanbarkat/hr-platform#readme",
+  "devDependencies": {
+    "turbo": "^2.10.9"
+  },
+  "dependencies": {
+    "openai": "^7.4.0"
+  }
+}
