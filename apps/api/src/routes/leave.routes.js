@@ -17,11 +17,16 @@ import {
   hrApproveRequest,
   rejectRequest,
   getPendingApprovals,
+  getMyLeaveHistory,
+  getLeaveApprovalTurnaroundAnalytics,
+  getLeaveRequestTimeline,
 } from '../controllers/leaveRequest.controller.js';
 
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
-import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { requirePermission,
+        requireRole
+ } from '../middlewares/rbac.middleware.js';
 import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
@@ -81,6 +86,37 @@ router.patch(
   '/requests/:id/reject',
   requirePermission(PERMISSIONS.LEAVE.APPROVE_MANAGER),
   rejectRequest
+);
+
+// ==========================================
+// 4. Leave History & Analytics (TICKET-014)
+// ==========================================
+
+// ESS Full Leave History (Self-Service)
+router.get(
+  '/my-history',
+  getMyLeaveHistory
+);
+
+// PRD Turnaround Analytics (Company Admin / HR)
+router.get(
+  '/analytics/turnaround-time',
+  requireRole(['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR', 'HR_MANAGER']),
+  getLeaveApprovalTurnaroundAnalytics
+);
+
+// Detail View History Timeline
+router.get(
+  '/requests/:id/timeline',
+  requireRole([
+    'COMPANY_ADMIN',
+    'SUPER_ADMIN',
+    'HR',
+    'HR_MANAGER',
+    'MANAGER',
+    'EMPLOYEE'
+  ]),
+  getLeaveRequestTimeline
 );
 
 export default router;
