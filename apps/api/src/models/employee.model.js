@@ -12,7 +12,13 @@ const employeeSchema = new Schema(
     type: String,
     trim: true,
     default: null, // e.g., "Assistant HR", "Junior HR", "Intern HR", "Floor 1 Manager"
-  },
+   },
+   customRoleId: {
+   type: Schema.Types.ObjectId,
+   ref: 'CustomRole',
+   default: null,
+   index: true,
+   },
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
