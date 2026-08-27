@@ -21,8 +21,15 @@ import payrollRoutes from './src/routes/payroll.routes.js';
 import payslipRouter from './src/routes/payslip.routes.js';
 import calendarRoutes from './src/routes/calendar.routes.js';
 import taskRoutes from './src/routes/task.routes.js';
+import essRouter from './src/routes/ess.routes.js';
 
 const app = express();
+
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+app.use(express.json({ limit: '16kb' }));
+app.use(express.urlencoded({ extended: true, limit: '16kb' }));
+app.use(express.static('public'));
+app.use(cookieParser());
 
 app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '16kb' }));
@@ -49,6 +56,13 @@ app.use('/api/v1/tasks', taskRoutes);
 // Leaves & Payroll routes
 app.use('/api/v1/leaves', leaveRoutes);
 app.use('/api/v1/salaries', salaryStructureRouter);
+app.use('/api/v1/payroll', payrollRoutes);
+app.use('/api/v1/payslips', payslipRouter);
+
+//ESS portal routes
+app.use('/api/v1/ess', essRouter);
+
+
 app.use('/api/v1/salary-types', salaryTypeRouter);
 app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
