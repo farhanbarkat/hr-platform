@@ -24,6 +24,7 @@ import calendarRoutes from './src/routes/calendar.routes.js';
 import taskRoutes from './src/routes/task.routes.js';
 import essRouter from './src/routes/ess.routes.js';
 import expenseClaimRouter from './src/routes/expenseClaim.routes.js';
+import customRoleRouter from './src/routes/customRole.routes.js';
 
 const app = express();
 
@@ -74,6 +75,9 @@ app.use('/api/v1/payslips', payslipRouter);
 
 // Role Capability Overrides Route
 app.use('/api/v1/role-overrides', roleOverrideRouter);
+
+// Custom Role Builder Route
+app.use('/api/v1/custom-roles', customRoleRouter);
 
 // Global Error Handler
 app.use(errorHandler);
