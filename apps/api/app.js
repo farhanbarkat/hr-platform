@@ -9,17 +9,19 @@ import { errorHandler } from './src/middlewares/error.middleware.js';
 import authRouter from './src/routes/auth.routes.js';
 import superAdminRouter from './src/routes/superAdmin.routes.js';
 import superAdminAdvancedRouter from './src/routes/superAdminAdvanced.routes.js';
-import companyRouter from './src/routes/company.routes.js';
 import departmentRouter from './src/routes/department.routes.js';
+import companyRouter from './src/routes/company.routes.js';
 import employeeRouter from './src/routes/employee.routes.js';
 import documentRouter from './src/routes/document.routes.js';
 import attendanceRouter from './src/routes/attendance.routes.js';
 import leaveRoutes from './src/routes/leave.routes.js';
 import salaryStructureRouter from './src/routes/salaryStructure.routes.js';
+import salaryTypeRouter from './src/routes/salaryType.routes.js';
 import payrollRoutes from './src/routes/payroll.routes.js';
 import payslipRouter from './src/routes/payslip.routes.js';
 import calendarRoutes from './src/routes/calendar.routes.js';
 import taskRoutes from './src/routes/task.routes.js';
+import essRouter from './src/routes/ess.routes.js';
 
 const app = express();
 
@@ -34,7 +36,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/super-admin', superAdminRouter);
 app.use('/api/v1/super-admin/advanced', superAdminAdvancedRouter);
 
-// Organization & Structure routes
+// Organization & Department routes
 app.use('/api/v1/companies', companyRouter);
 app.use('/api/v1/departments', departmentRouter);
 app.use('/api/v1/calendar', calendarRoutes);
@@ -50,6 +52,10 @@ app.use('/api/v1/leaves', leaveRoutes);
 app.use('/api/v1/salaries', salaryStructureRouter);
 app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
+
+//ESS portal routes
+app.use('/api/v1/ess', essRouter);
+
 
 // Global Error Handler
 app.use(errorHandler);

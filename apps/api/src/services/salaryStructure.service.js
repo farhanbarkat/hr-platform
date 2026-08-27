@@ -10,6 +10,7 @@ export class SalaryStructureService {
   static async createSalaryStructure({
     companyId,
     employeeId,
+    salaryTypeId = null, // Fixed: Added to parameters
     effectiveFrom,
     basicPay,
     allowances = [],
@@ -18,7 +19,10 @@ export class SalaryStructureService {
     createdBy,
   }) {
     if (!companyId || !employeeId || !effectiveFrom || basicPay === undefined) {
-      throw new ApiError(400, 'companyId, employeeId, effectiveFrom, and basicPay are required.');
+      throw new ApiError(
+        400,
+        'companyId, employeeId, effectiveFrom, and basicPay are required.'
+      );
     }
 
     const effectiveDate = new Date(effectiveFrom);
@@ -27,7 +31,9 @@ export class SalaryStructureService {
     }
 
     // Convert basicPay to Decimal128
-    const decimalBasicPay = mongoose.Types.Decimal128.fromString(basicPay.toString());
+    const decimalBasicPay = mongoose.Types.Decimal128.fromString(
+      basicPay.toString()
+    );
 
     // Convert all allowance amounts to Decimal128
     const formattedAllowances = allowances.map((item) => {
@@ -51,13 +57,16 @@ export class SalaryStructureService {
     if (existing) {
       throw new ApiError(
         409,
-        `A salary structure effective from ${effectiveDate.toISOString().split('T')[0]} already exists. Create with a new effective date.`
+        `A salary structure effective from ${
+          effectiveDate.toISOString().split('T')[0]
+        } already exists. Create with a new effective date.`
       );
     }
 
     const newStructure = await SalaryStructure.create({
       companyId,
       employeeId,
+      salaryTypeId: salaryTypeId || null,
       effectiveFrom: effectiveDate,
       basicPay: decimalBasicPay,
       allowances: formattedAllowances,
@@ -76,7 +85,10 @@ export class SalaryStructureService {
   static async getActiveSalaryStructure(employeeId, queryDate = new Date()) {
     const targetDate = new Date(queryDate);
     if (isNaN(targetDate.getTime())) {
-      throw new ApiError(400, 'Invalid date provided for salary structure resolution.');
+      throw new ApiError(
+        400,
+        'Invalid date provided for salary structure resolution.'
+      );
     }
 
     const structure = await SalaryStructure.findOne({
@@ -84,19 +96,19 @@ export class SalaryStructureService {
       effectiveFrom: { $lte: targetDate },
     })
       .sort({ effectiveFrom: -1 })
+      .populate('salaryTypeId')
       .lean();
 
     if (!structure) {
       return null;
     }
 
-    // Helper helper to return plain serializable numbers alongside Decimal128
     return {
       ...structure,
-      basicPayDecimal: structure.basicPay.toString(),
-      allowances: structure.allowances.map((a) => ({
+      basicPayDecimal: structure.basicPay ? structure.basicPay.toString() : '0',
+      allowances: (structure.allowances || []).map((a) => ({
         name: a.name,
-        amountDecimal: a.amount.toString(),
+        amountDecimal: a.amount ? a.amount.toString() : '0',
         isTaxable: a.isTaxable,
       })),
     };
@@ -108,6 +120,7 @@ export class SalaryStructureService {
   static async getSalaryHistory(companyId, employeeId) {
     return await SalaryStructure.find({ companyId, employeeId })
       .sort({ effectiveFrom: -1 })
+      .populate('salaryTypeId')
       .populate('createdBy', 'name email');
   }
 }
