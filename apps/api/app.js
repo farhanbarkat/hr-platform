@@ -31,6 +31,12 @@ app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 app.use(express.static('public'));
 app.use(cookieParser());
 
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+app.use(express.json({ limit: '16kb' }));
+app.use(express.urlencoded({ extended: true, limit: '16kb' }));
+app.use(express.static('public'));
+app.use(cookieParser());
+
 // Auth & Super Admin routes
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/super-admin', superAdminRouter);
@@ -56,6 +62,10 @@ app.use('/api/v1/payslips', payslipRouter);
 //ESS portal routes
 app.use('/api/v1/ess', essRouter);
 
+
+app.use('/api/v1/salary-types', salaryTypeRouter);
+app.use('/api/v1/payroll', payrollRoutes);
+app.use('/api/v1/payslips', payslipRouter);
 
 // Global Error Handler
 app.use(errorHandler);
