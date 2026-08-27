@@ -33,6 +33,13 @@ const salaryStructureSchema = new Schema(
       required: true,
       index: true,
     },
+    // TICKET-014B: Optional reference for Flexible Salary Types (nullable for fixed/legacy)
+    salaryTypeId: {
+      type: Schema.Types.ObjectId,
+      ref: 'SalaryType',
+      default: null,
+      index: true,
+    },
     effectiveFrom: {
       type: Date,
       required: [true, 'Effective date is required'],
@@ -68,4 +75,5 @@ const salaryStructureSchema = new Schema(
 // Compound index for high-speed chronological snapshot queries
 salaryStructureSchema.index({ employeeId: 1, effectiveFrom: -1 });
 
-export const SalaryStructure = mongoose.model('SalaryStructure', salaryStructureSchema);
+export const SalaryStructure =
+  mongoose.models.SalaryStructure || mongoose.model('SalaryStructure', salaryStructureSchema);

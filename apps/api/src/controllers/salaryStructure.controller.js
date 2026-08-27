@@ -4,7 +4,15 @@ import { ApiError } from '../utils/ApiError.js';
 import { SalaryStructureService } from '../services/salaryStructure.service.js';
 
 export const createSalaryStructure = asyncHandler(async (req, res) => {
-  const { employeeId, effectiveFrom, basicPay, allowances, currency, notes } = req.body;
+  const {
+    employeeId,
+    effectiveFrom,
+    basicPay,
+    allowances,
+    currency,
+    notes,
+    salaryTypeId, // TICKET-014B: Optional Flexible Salary Type reference
+  } = req.body;
 
   const structure = await SalaryStructureService.createSalaryStructure({
     companyId: req.user.companyId,
@@ -14,6 +22,7 @@ export const createSalaryStructure = asyncHandler(async (req, res) => {
     allowances,
     currency,
     notes,
+    salaryTypeId: salaryTypeId || null, // Nullable for standard fixed structure
     createdBy: req.user._id,
   });
 
@@ -30,7 +39,10 @@ export const getActiveSalary = asyncHandler(async (req, res) => {
   const structure = await SalaryStructureService.getActiveSalaryStructure(employeeId, targetDate);
 
   if (!structure) {
-    throw new ApiError(404, 'No active salary structure found for this employee on the specified date.');
+    throw new ApiError(
+      404,
+      'No active salary structure found for this employee on the specified date.'
+    );
   }
 
   return res
