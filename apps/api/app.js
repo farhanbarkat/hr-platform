@@ -22,6 +22,7 @@ import payslipRouter from './src/routes/payslip.routes.js';
 import calendarRoutes from './src/routes/calendar.routes.js';
 import taskRoutes from './src/routes/task.routes.js';
 import essRouter from './src/routes/ess.routes.js';
+import expenseClaimRouter from './src/routes/expenseClaim.routes.js';
 
 const app = express();
 
@@ -61,6 +62,9 @@ app.use('/api/v1/payslips', payslipRouter);
 
 //ESS portal routes
 app.use('/api/v1/ess', essRouter);
+
+// Expense Claims Route
+app.use('/api/v1/expenses', expenseClaimRouter);
 
 
 app.use('/api/v1/salary-types', salaryTypeRouter);
