@@ -2,6 +2,8 @@ import jwt from 'jsonwebtoken';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { TOKEN_TYPES, verifyToken } from '../utils/token.util.js';
+import { RoleCapabilityOverride } from '../models/roleCapabilityOverride.model.js';
+import { Employee } from '../models/employee.model.js';
 
 const getBearerToken = (req) => {
   const authorizationHeader = req.header('Authorization');
@@ -81,14 +83,84 @@ export const verify2FAChallenge = asyncHandler(async (req, res, next) => {
   }
 });
 
-export const authorizeRoles = (...allowedRoles) => {
-  return (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
-      throw new ApiError(
-        403,
-        `Role (${req.user?.role || 'UNKNOWN'}) is not allowed to access this resource.`
-      );
+/**
+ * Checks if a specific permission has been revoked/subtracted for this employee
+ */
+export const isPermissionOverridden = async (companyId, userId, userEmail, permissionKey) => {
+  if (!companyId || !permissionKey) return false;
+
+  const employee = await Employee.findOne({
+    $or: [{ userId }, { email: userEmail }],
+    companyId,
+  }).select('_id');
+
+  if (!employee) return false;
+
+  const override = await RoleCapabilityOverride.findOne({
+    companyId,
+    employeeId: employee._id,
+  }).select('removedPermissions');
+
+  if (override && override.removedPermissions && override.removedPermissions.includes(permissionKey)) {
+    return true; // Yes, permission is explicitly revoked/removed
+  }
+
+  return false;
+};
+
+/**
+ * Role & Capability Authorization Middleware
+ * Supports:
+ *   - authorizeRoles('HR', 'ADMIN', 'MANAGER')
+ *   - authorizeRoles(['HR', 'MANAGER'], 'PAYROLL_APPROVE')
+ */
+export const authorizeRoles = (...args) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, 'Unauthorized request.');
+      }
+
+      let allowedRoles = [];
+      let requiredPermission = null;
+
+      if (args.length === 2 && Array.isArray(args[0]) && typeof args[1] === 'string') {
+        allowedRoles = args[0];
+        requiredPermission = args[1];
+      } else {
+        allowedRoles = args.flat();
+      }
+
+      // 1. Role Check
+      if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) {
+        throw new ApiError(
+          403,
+          `Role (${req.user?.role || 'UNKNOWN'}) is not allowed to access this resource.`
+        );
+      }
+
+      // 2. Subtractive Role Capability Override Check (TICKET-005E)
+      const permissionToCheck = requiredPermission || req.requiredPermission;
+      if (permissionToCheck) {
+        const companyId = req.companyId || req.user.companyId;
+        const isRestricted = await isPermissionOverridden(
+          companyId,
+          req.user._id,
+          req.user.email,
+          permissionToCheck
+        );
+
+        if (isRestricted) {
+          throw new ApiError(
+            403,
+            `Access denied: Permission '${permissionToCheck}' has been restricted for your account.`
+          );
+        }
+      }
+
+      next();
+    } catch (error) {
+      next(error);
     }
-    next();
   };
 };

@@ -8,6 +8,11 @@ const employeeSchema = new Schema(
       required: true,
       index: true,
     },
+    jobTitle: {
+    type: String,
+    trim: true,
+    default: null, // e.g., "Assistant HR", "Junior HR", "Intern HR", "Floor 1 Manager"
+  },
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
