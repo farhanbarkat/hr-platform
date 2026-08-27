@@ -10,6 +10,7 @@ import authRouter from './src/routes/auth.routes.js';
 import superAdminRouter from './src/routes/superAdmin.routes.js';
 import superAdminAdvancedRouter from './src/routes/superAdminAdvanced.routes.js';
 import departmentRouter from './src/routes/department.routes.js';
+import roleOverrideRouter from './src/routes/roleCapabilityOverride.routes.js';
 import companyRouter from './src/routes/company.routes.js';
 import employeeRouter from './src/routes/employee.routes.js';
 import documentRouter from './src/routes/document.routes.js';
@@ -70,6 +71,9 @@ app.use('/api/v1/expenses', expenseClaimRouter);
 app.use('/api/v1/salary-types', salaryTypeRouter);
 app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
+
+// Role Capability Overrides Route
+app.use('/api/v1/role-overrides', roleOverrideRouter);
 
 // Global Error Handler
 app.use(errorHandler);
