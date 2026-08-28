@@ -32,6 +32,8 @@ import promotionRouter from './src/routes/promotion.routes.js';
 import offboardingRouter from './src/routes/offboarding.routes.js';
 import shiftRouter from './src/routes/shift.routes.js';
 import shiftInchargeRouter from './src/routes/shiftIncharge.routes.js';
+import shiftSwapRouter from './src/routes/shiftSwap.routes.js';
+
 
 const app = express();
 
@@ -93,6 +95,9 @@ app.use('/api/v1/shifts', shiftRouter);
 
 // Shift Incharge Real-Time Dashboard Route (TICKET-024)
 app.use('/api/v1/shift-incharge', shiftInchargeRouter);
+
+// Shift Swap Requests (TICKET-025)
+app.use('/api/v1/shift-swaps', shiftSwapRouter);
 
 // Global Error Handler
 app.use(errorHandler); 
