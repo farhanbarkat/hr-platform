@@ -33,6 +33,7 @@ import offboardingRouter from './src/routes/offboarding.routes.js';
 import shiftRouter from './src/routes/shift.routes.js';
 import shiftInchargeRouter from './src/routes/shiftIncharge.routes.js';
 import shiftSwapRouter from './src/routes/shiftSwap.routes.js';
+import taskAttachmentRouter from './src/routes/taskAttachment.routes.js';
 
 
 const app = express();
@@ -98,6 +99,9 @@ app.use('/api/v1/shift-incharge', shiftInchargeRouter);
 
 // Shift Swap Requests (TICKET-025)
 app.use('/api/v1/shift-swaps', shiftSwapRouter);
+
+// Task Attachments (TICKET-026)
+app.use('/api/v1/task-attachments', taskAttachmentRouter);
 
 // Global Error Handler
 app.use(errorHandler); 
