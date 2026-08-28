@@ -31,6 +31,7 @@ import letterTemplateRouter from './src/routes/letterTemplate.routes.js';
 import promotionRouter from './src/routes/promotion.routes.js';
 import offboardingRouter from './src/routes/offboarding.routes.js';
 import shiftRouter from './src/routes/shift.routes.js';
+import shiftInchargeRouter from './src/routes/shiftIncharge.routes.js';
 
 const app = express();
 
@@ -89,8 +90,12 @@ app.use('/api/v1/offboarding', offboardingRouter);
 
 // Shift Management & Scheduling (TICKET-023)
 app.use('/api/v1/shifts', shiftRouter);
+
+// Shift Incharge Real-Time Dashboard Route (TICKET-024)
+app.use('/api/v1/shift-incharge', shiftInchargeRouter);
+
 // Global Error Handler
-app.use(errorHandler);
+app.use(errorHandler); 
 
 
 export default app;
