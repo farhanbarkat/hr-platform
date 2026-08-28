@@ -29,6 +29,7 @@ import announcementRouter from './src/routes/announcement.routes.js';
 import notificationRouter from './src/routes/notification.routes.js';
 import letterTemplateRouter from './src/routes/letterTemplate.routes.js';
 import promotionRouter from './src/routes/promotion.routes.js';
+import offboardingRouter from './src/routes/offboarding.routes.js';
 
 const app = express();
 
@@ -81,6 +82,9 @@ app.use('/api/v1/letter-templates', letterTemplateRouter);
 
 // Career & Promotions route (TICKET-022B)
 app.use('/api/v1/promotions', promotionRouter);
+
+// Offboarding, Resignations & Exit Lifecycle (TICKET-022C)
+app.use('/api/v1/offboarding', offboardingRouter);
 // Global Error Handler
 app.use(errorHandler);
 
