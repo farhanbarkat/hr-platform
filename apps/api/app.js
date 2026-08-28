@@ -1,3 +1,4 @@
+import notificationRouter from './src/routes/notification.routes.js';
 import announcementRouter from './src/routes/announcement.routes.js';
 import express from 'express';
 import cors from 'cors';
@@ -55,7 +56,8 @@ app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
 // Mount route
 app.use('/api/v1/announcements', announcementRouter);
-
+// Under API routes:
+app.use('/api/v1/notifications', notificationRouter);
 // Global Error Handler
 app.use(errorHandler);
 
