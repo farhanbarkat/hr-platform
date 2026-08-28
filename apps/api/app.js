@@ -1,4 +1,3 @@
-import announcementRouter from './src/routes/announcement.routes.js';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -26,15 +25,12 @@ import taskRoutes from './src/routes/task.routes.js';
 import essRouter from './src/routes/ess.routes.js';
 import expenseClaimRouter from './src/routes/expenseClaim.routes.js';
 import customRoleRouter from './src/routes/customRole.routes.js';
+import announcementRouter from './src/routes/announcement.routes.js';
+import notificationRouter from './src/routes/notification.routes.js';
 
 const app = express();
 
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
-app.use(express.json({ limit: '16kb' }));
-app.use(express.urlencoded({ extended: true, limit: '16kb' }));
-app.use(express.static('public'));
-app.use(cookieParser());
-
+// Global Middlewares (Cleaned up duplicates)
 app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '16kb' }));
 app.use(express.urlencoded({ extended: true, limit: '16kb' }));
@@ -50,6 +46,8 @@ app.use('/api/v1/super-admin/advanced', superAdminAdvancedRouter);
 app.use('/api/v1/companies', companyRouter);
 app.use('/api/v1/departments', departmentRouter);
 app.use('/api/v1/calendar', calendarRoutes);
+app.use('/api/v1/roles/overrides', roleOverrideRouter);
+app.use('/api/v1/roles/custom', customRoleRouter);
 
 // Protected tenant/company routes (with read-only guard applied)
 app.use('/api/v1/employees', enforceReadOnlyImpersonation, employeeRouter);
@@ -57,30 +55,24 @@ app.use('/api/v1/documents', documentRouter);
 app.use('/api/v1/attendance', attendanceRouter);
 app.use('/api/v1/tasks', taskRoutes);
 
-// Leaves & Payroll routes
+// Leaves & Salary types routes
 app.use('/api/v1/leaves', leaveRoutes);
 app.use('/api/v1/salaries', salaryStructureRouter);
+app.use('/api/v1/salary-types', salaryTypeRouter);
+
+// Payroll & Payslips routes
 app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
 
-//ESS portal routes
+// ESS Portal routes
 app.use('/api/v1/ess', essRouter);
 
 // Expense Claims Route
 app.use('/api/v1/expenses', expenseClaimRouter);
 
-
-app.use('/api/v1/salary-types', salaryTypeRouter);
-app.use('/api/v1/payroll', payrollRoutes);
-app.use('/api/v1/payslips', payslipRouter);
-// Mount route
+// Announcements & Notifications routes
 app.use('/api/v1/announcements', announcementRouter);
-
-// Role Capability Overrides Route
-app.use('/api/v1/role-overrides', roleOverrideRouter);
-
-// Custom Role Builder Route
-app.use('/api/v1/custom-roles', customRoleRouter);
+app.use('/api/v1/notifications', notificationRouter);
 
 // Global Error Handler
 app.use(errorHandler);
