@@ -33,14 +33,12 @@ export class NotificationService {
       // Resolve manager ID across common field naming conventions
       let managerUserId = employee.managerId || employee.manager || employee.reportsTo;
 
-      // Agar employee record me direct managerId nahi to company admin fallback ya manager record fetch
       if (managerUserId) {
         const managerDoc = await Employee.findById(managerUserId);
         if (managerDoc && managerDoc.userId) {
           managerUserId = managerDoc.userId;
         }
       } else {
-        // Fallback to notification target
         managerUserId = employee.userId || employee._id;
       }
 
@@ -62,5 +60,43 @@ export class NotificationService {
     }
 
     return { alertSent: false, threshold };
+  }
+
+  /**
+   * TICKET-021: Broadcast announcement notifications to target audience employees
+   */
+  static async notifyAnnouncement({ announcement, companyId }) {
+    let query = { companyId, employmentStatus: 'active' };
+
+    if (announcement.targetAudience === 'department' && announcement.targetDepartmentId) {
+      query.departmentId = announcement.targetDepartmentId;
+    } else if (announcement.targetAudience === 'team' && announcement.targetTeamId) {
+      query.teamId = announcement.targetTeamId;
+    }
+
+    // Resolve target recipients
+    const recipients = await Employee.find(query).select('_id userId email firstName lastName');
+
+    // Dispatch via unified notification logger
+    for (const recipient of recipients) {
+      const targetUserId = recipient.userId || recipient._id;
+      await this.sendNotification({
+        recipientId: targetUserId,
+        title: `📢 Announcement: ${announcement.title}`,
+        message: announcement.body.length > 120 ? `${announcement.body.slice(0, 117)}...` : announcement.body,
+        data: {
+          announcementId: announcement._id,
+          targetAudience: announcement.targetAudience,
+          priority: announcement.priority,
+        },
+        type: announcement.priority === 'urgent' ? 'WARNING' : 'INFO',
+      });
+    }
+
+    return {
+      success: true,
+      recipientCount: recipients.length,
+      targetAudience: announcement.targetAudience,
+    };
   }
 }

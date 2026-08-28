@@ -1,3 +1,4 @@
+import announcementRouter from './src/routes/announcement.routes.js';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -72,6 +73,8 @@ app.use('/api/v1/expenses', expenseClaimRouter);
 app.use('/api/v1/salary-types', salaryTypeRouter);
 app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/payslips', payslipRouter);
+// Mount route
+app.use('/api/v1/announcements', announcementRouter);
 
 // Role Capability Overrides Route
 app.use('/api/v1/role-overrides', roleOverrideRouter);
