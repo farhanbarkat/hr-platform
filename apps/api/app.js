@@ -38,6 +38,7 @@ import taskTimeLogRouter from './src/routes/taskTimeLog.routes.js';
 import teamRouter from './src/routes/team.routes.js';
 import loanRouter from './src/routes/loan.routes.js';
 import taxSlabRouter from './src/routes/taxSlab.routes.js';
+import taxCertificateRouter from './src/routes/taxCertificate.routes.js';
 
 const app = express();
 
@@ -117,6 +118,9 @@ app.use('/api/v1/loans', loanRouter);
 
 // Tax Slabs & Progressive Calculation (TICKET-031)
 app.use('/api/v1/tax-slabs', taxSlabRouter);
+
+// Tax Certificate Routes (TICKET-032)
+app.use('/api/v1/tax-certificates', taxCertificateRouter);
 
 // Global Error Handler
 app.use(errorHandler); 
