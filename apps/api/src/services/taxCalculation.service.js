@@ -1,13 +1,70 @@
 import { TaxSlab } from '../models/taxSlab.model.js';
 import { Company } from '../models/company.model.js';
+import { getTaxPreset, hasTaxPreset } from '../constants/taxPresets.js';
+
+/**
+ * Auto-seeds or applies standard preset tax slab for a company
+ * Called on company creation, country change, or manual reset request
+ */
+export const autoSeedCompanyTaxPreset = async (companyId, countryCode, userId = null, force = false) => {
+  if (!countryCode) return { presetApplied: false, requiresManualConfig: true };
+
+  const country = countryCode.toUpperCase();
+  const preset = getTaxPreset(country);
+
+  if (!preset) {
+    return {
+      presetApplied: false,
+      requiresManualConfig: true,
+      message: `No pre-built tax slab preset available for country '${country}'. Manual configuration required.`,
+    };
+  }
+
+  // Check if active slab already exists for this company
+  const existingActive = await TaxSlab.findOne({
+    companyId,
+    country,
+    isActive: true,
+  });
+
+  if (existingActive && !force) {
+    return {
+      presetApplied: false,
+      requiresManualConfig: false,
+      message: 'Active tax slab already exists. Existing configuration preserved.',
+      taxSlab: existingActive,
+    };
+  }
+
+  // Deactivate any existing active slabs if forcing a fresh preset
+  if (force) {
+    await TaxSlab.updateMany({ companyId, country }, { isActive: false });
+  }
+
+  // Create editable TaxSlab document from preset template
+  const newTaxSlab = await TaxSlab.create({
+    companyId,
+    country: preset.country,
+    taxYear: preset.taxYear,
+    frequency: preset.frequency,
+    slabs: preset.slabs,
+    standardExemption: preset.standardExemption || 0,
+    taxFreeAllowance: preset.taxFreeAllowance || 0,
+    rebatePercentage: preset.rebatePercentage || 0,
+    isActive: true,
+    createdBy: userId,
+  });
+
+  return {
+    presetApplied: true,
+    requiresManualConfig: false,
+    message: `Applied default '${preset.countryName}' tax regime (${preset.taxYear}). Fully editable by HR.`,
+    taxSlab: newTaxSlab,
+  };
+};
 
 /**
  * Calculates progressive tax for an employee based on company tax slabs
- * 
- * @param {ObjectId} companyId - Tenant Company ID
- * @param {Number} monthlyTaxableIncome - Employee taxable monthly gross
- * @param {Object} options - Optional overrides (country, taxYear)
- * @returns {Object} Tax breakdown with monthlyTax, annualTax, and applicable slabs
  */
 export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 0, options = {}) => {
   if (monthlyTaxableIncome <= 0) {
@@ -20,7 +77,6 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
     };
   }
 
-  // Determine Country from options or Company settings
   let targetCountry = options.country;
   if (!targetCountry) {
     const company = await Company.findById(companyId).select('country');
@@ -38,7 +94,7 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
     isActive: true,
   });
 
-  // Fallback: Check if company has any active tax configuration for that country
+  // Fallback: Check for any active configuration for that country
   if (!taxConfig) {
     taxConfig = await TaxSlab.findOne({
       companyId,
@@ -47,7 +103,14 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
     }).sort({ createdAt: -1 });
   }
 
-  // If no tax configuration found for this tenant, default to 0 tax
+  // Auto-seed if missing and preset exists
+  if (!taxConfig && hasTaxPreset(targetCountry)) {
+    const seedResult = await autoSeedCompanyTaxPreset(companyId, targetCountry, null, false);
+    if (seedResult.presetApplied) {
+      taxConfig = seedResult.taxSlab;
+    }
+  }
+
   if (!taxConfig || !taxConfig.slabs || taxConfig.slabs.length === 0) {
     return {
       monthlyTax: 0,
@@ -55,25 +118,21 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
       effectiveTaxRate: 0,
       appliedSlabs: [],
       taxableAnnualIncome: monthlyTaxableIncome * 12,
-      note: 'No active tax slab configured. Tax defaulted to 0.',
+      requiresManualConfig: true,
+      note: `No tax slab configured for country '${targetCountry}'. Please configure tax slabs in Settings.`,
     };
   }
 
-  // Sort brackets by minIncome ascending
   const brackets = [...taxConfig.slabs].sort((a, b) => a.minIncome - b.minIncome);
-
-  // Convert monthly to annual income for standard calculation
   const isAnnualConfig = taxConfig.frequency === 'ANNUAL';
   const grossAnnual = isAnnualConfig ? monthlyTaxableIncome * 12 : monthlyTaxableIncome;
 
-  // 2. Apply Standard Deductions & Exemptions
   const totalExemptions = (taxConfig.standardExemption || 0) + (taxConfig.taxFreeAllowance || 0);
   const netTaxableIncome = Math.max(0, grossAnnual - totalExemptions);
 
   let totalTax = 0;
   const appliedSlabs = [];
 
-  // 3. Progressive Bracket Execution
   for (const slab of brackets) {
     const min = slab.minIncome;
     const max = slab.maxIncome !== null && slab.maxIncome !== undefined ? slab.maxIncome : Infinity;
@@ -81,13 +140,10 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
     const fixedAmount = slab.fixedAmount || 0;
 
     if (netTaxableIncome > min) {
-      // Calculate portion of income that falls in this bracket
       const taxableInBracket = Math.min(netTaxableIncome, max) - min;
       const bracketTax = (taxableInBracket * rate) / 100;
-
       totalTax += bracketTax;
 
-      // Add fixed amount only if this is the active bracket tier
       if (fixedAmount > 0 && netTaxableIncome <= max) {
         totalTax += fixedAmount;
       }
@@ -102,13 +158,11 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
     }
   }
 
-  // 4. Apply Tax Rebate (if configured)
   if (taxConfig.rebatePercentage > 0) {
     const rebateAmount = (totalTax * taxConfig.rebatePercentage) / 100;
     totalTax = Math.max(0, totalTax - rebateAmount);
   }
 
-  // Round results to 2 decimal places
   const finalAnnualTax = Math.round(totalTax * 100) / 100;
   const finalMonthlyTax = isAnnualConfig
     ? Math.round((finalAnnualTax / 12) * 100) / 100
@@ -126,6 +180,7 @@ export const calculateProgressiveTax = async (companyId, monthlyTaxableIncome = 
     taxableAnnualIncome: isAnnualConfig ? netTaxableIncome : netTaxableIncome * 12,
     country: targetCountry,
     taxYear: taxConfig.taxYear,
+    requiresManualConfig: false,
     appliedSlabs,
   };
 };
