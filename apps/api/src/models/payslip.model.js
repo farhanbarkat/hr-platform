@@ -105,9 +105,10 @@ payslipSchema.index({ companyId: 1, employeeId: 1, 'period.year': 1, 'period.mon
 // --- IMMUTABILITY GUARD (DATABASE LAYER) ---
 const allowedPdfFields = ['pdfS3Key', 'pdfUrl', 'pdfGeneratedAt'];
 
-payslipSchema.pre('save', async function (next) {
+// Clean Async Hook without next()
+payslipSchema.pre('save', async function () {
   if (!this.isNew && this.isModified()) {
-    if (this.isModified('status')) return next();
+    if (this.isModified('status')) return;
 
     if (this.status === 'APPROVED' || this.status === 'PAID') {
       const modified = this.modifiedPaths();
@@ -120,10 +121,8 @@ payslipSchema.pre('save', async function (next) {
       }
     }
   }
-  next();
 });
 
-// Query execution standard handler block without fragile next parameter bindings
 payslipSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], async function () {
   const options = this.getOptions();
   if (options && options.bypassImmutability) {
@@ -147,4 +146,5 @@ payslipSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], async functio
     );
   }
 });
+
 export const Payslip = mongoose.model('Payslip', payslipSchema);
