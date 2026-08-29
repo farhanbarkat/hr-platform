@@ -34,6 +34,7 @@ import shiftRouter from './src/routes/shift.routes.js';
 import shiftInchargeRouter from './src/routes/shiftIncharge.routes.js';
 import shiftSwapRouter from './src/routes/shiftSwap.routes.js';
 import taskAttachmentRouter from './src/routes/taskAttachment.routes.js';
+import taskTimeLogRouter from './src/routes/taskTimeLog.routes.js';
 
 
 const app = express();
@@ -102,6 +103,9 @@ app.use('/api/v1/shift-swaps', shiftSwapRouter);
 
 // Task Attachments (TICKET-026)
 app.use('/api/v1/task-attachments', taskAttachmentRouter);
+
+// Task Time Tracking (TICKET-027)
+app.use('/api/v1/task-time-logs', taskTimeLogRouter);
 
 // Global Error Handler
 app.use(errorHandler); 
