@@ -2,6 +2,7 @@ import { Company } from '../models/company.model.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { autoSeedCompanyTaxPreset } from '../services/taxCalculation.service.js';
 import redis from '../db/redis.js';
 
 /**
@@ -10,7 +11,7 @@ import redis from '../db/redis.js';
  * @access  Super-Admin
  */
 export const createCompany = asyncHandler(async (req, res) => {
-  const { name, slug, currency, defaultTimezone, settings } = req.body;
+  const { name, slug, country, currency, defaultTimezone, settings } = req.body;
 
   if (!name || !slug) {
     throw new ApiError(400, 'Company name and unique slug are required.');
@@ -22,13 +23,21 @@ export const createCompany = asyncHandler(async (req, res) => {
     throw new ApiError(409, 'Company slug already exists.');
   }
 
+  const companyCountry = country ? country.toUpperCase() : 'PK';
+
   const company = await Company.create({
     name,
     slug: slug.toLowerCase(),
+    country: companyCountry,
     currency: currency || 'PKR',
     defaultTimezone: defaultTimezone || 'Asia/Karachi',
     settings: settings || {},
   });
+
+  // Auto-seed tax slab preset (TICKET-031B)
+  if (company.country) {
+    await autoSeedCompanyTaxPreset(company._id, company.country, req.user?._id, false);
+  }
 
   return res
     .status(201)
