@@ -6,6 +6,7 @@ import {
   setup2FA,
   confirm2FASetup,
   verify2FALogin,
+  registerDeviceToken,
 } from '../controllers/auth.controller.js';
 import { verify2FAChallenge, verifyJWT } from '../middlewares/auth.middleware.js';
 
@@ -20,5 +21,6 @@ router.post('/2fa/verify-login', verify2FAChallenge, verify2FALogin);
 
 // Protected Routes
 router.post('/logout', verifyJWT, logout);
+router.post('/device-token', verifyJWT, registerDeviceToken);
 
 export default router;
