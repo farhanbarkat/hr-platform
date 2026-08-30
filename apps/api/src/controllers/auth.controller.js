@@ -312,3 +312,30 @@ export const logout = asyncHandler(async (req, res) => {
     .clearCookie('refreshToken', cookieOptions)
     .json(new ApiResponse(200, {}, 'Logged out successfully.'));
 });
+export const registerDeviceToken = asyncHandler(async (req, res) => {
+  const { token, platform, deviceId } = req.body;
+  const userId = req.user._id;
+
+  if (!token || !platform) {
+    throw new ApiError(400, 'Push token and platform are required.');
+  }
+
+  await User.findByIdAndUpdate(userId, {
+    $pull: { pushTokens: { deviceId } }, // Remove old token for this device if exists
+  });
+
+  await User.findByIdAndUpdate(userId, {
+    $push: {
+      pushTokens: {
+        token,
+        platform: platform.toLowerCase(),
+        deviceId: deviceId || null,
+        updatedAt: new Date(),
+      },
+    },
+  });
+
+  return res.status(200).json(
+    new ApiResponse(200, { registered: true }, 'Device token registered successfully.')
+  );
+});

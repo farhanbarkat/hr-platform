@@ -52,6 +52,14 @@ const userSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    pushTokens: [
+      {
+        token: { type: String, required: true },
+        platform: { type: String, enum: ['ios', 'android', 'web'], required: true },
+        deviceId: { type: String, default: null },
+        updatedAt: { type: Date, default: Date.now },
+      },
+    ],
     failedLoginAttempts: {
       type: Number,
       default: 0,

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.nexustech.hrplatform",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We use your location to verify on-site attendance when punching in and out.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We use your location to verify geofence boundaries for shift attendance.",
+        "NSFaceIDUsageDescription": "Use Face ID for seamless biometric login to your HR self-service account."
+      }
+    },
+    "android": {
+      "package": "com.nexustech.hrplatform",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    }
+  }
+}
