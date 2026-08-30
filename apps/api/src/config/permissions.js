@@ -90,6 +90,7 @@ export const PERMISSIONS = {
   // Finance permissions
   FINANCE: {
     CREATE_EXPENSE: 'finance.create_expense',
+    CREATE_INCOME: 'finance.create_income',
     READ_EXPENSE: 'finance.read_expense',
     APPROVE_EXPENSE: 'finance.approve_expense',
     CREATE_ADVANCE: 'finance.create_advance',

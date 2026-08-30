@@ -71,12 +71,12 @@ const companySchema = new mongoose.Schema(
       attendance: {
         shiftStart: {
           type: String,
-          default: '09:00', // HH:mm format
+          default: '09:00',
         },
 
         shiftEnd: {
           type: String,
-          default: '17:00', // HH:mm format
+          default: '17:00',
         },
 
         gracePeriodMinutes: {
@@ -86,24 +86,24 @@ const companySchema = new mongoose.Schema(
 
         standardShiftMinutes: {
           type: Number,
-          default: 480, // 8 hours
+          default: 480,
         },
 
         halfDayThresholdMinutes: {
           type: Number,
-          default: 240, // 4 hours minimum for half-day
+          default: 240,
         },
 
         overtimeMinimumMinutes: {
           type: Number,
-          default: 30, // Minimum overtime to count
+          default: 30,
         },
 
-        // --- NAYE FIELDS FOR TICKET-017 (CONFIGURABLE DEDUCTION SETTINGS) ---
+        // --- TICKET-017: CONFIGURABLE DEDUCTION SETTINGS ---
         deductionCalculationMode: {
           type: String,
           enum: ['DYNAMIC_HOURLY', 'FIXED_RATE'],
-          default: 'DYNAMIC_HOURLY', // DYNAMIC: Base Salary ke hisab se hourly cut, FIXED: Niche diye rate ke hisab se
+          default: 'DYNAMIC_HOURLY',
         },
 
         fixedDeductionRatePerHour: {
@@ -113,7 +113,7 @@ const companySchema = new mongoose.Schema(
 
         earlyCheckoutAlertThresholdMinutes: {
           type: Number,
-          default: 30, // Alert manager if checkout occurs >= 30 mins before shiftEnd
+          default: 30,
         },
       },
 
@@ -132,6 +132,25 @@ const companySchema = new mongoose.Schema(
           type: Number,
           default: 8,
         },
+      },
+    },
+
+    // Finance / Profit Alert Settings
+    financeSettings: {
+      lowProfitMarginThreshold: {
+        type: Number,
+        default: 15, // Percentage, e.g., alert if profit margin < 15%
+      },
+
+      minProfitAmountThreshold: {
+        type: Number,
+        default: 0, // PKR / Company Currency absolute threshold
+      },
+
+      currency: {
+        type: String,
+        default: 'PKR',
+        uppercase: true,
       },
     },
   },
