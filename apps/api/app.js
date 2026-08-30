@@ -39,6 +39,7 @@ import teamRouter from './src/routes/team.routes.js';
 import loanRouter from './src/routes/loan.routes.js';
 import taxSlabRouter from './src/routes/taxSlab.routes.js';
 import taxCertificateRouter from './src/routes/taxCertificate.routes.js';
+import financeRouter from './src/routes/finance.routes.js';
 
 const app = express();
 
@@ -121,6 +122,9 @@ app.use('/api/v1/tax-slabs', taxSlabRouter);
 
 // Tax Certificate Routes (TICKET-032)
 app.use('/api/v1/tax-certificates', taxCertificateRouter);
+
+// Finance Dashboard & Metrics (TICKET-033)
+app.use('/api/v1/finance', financeRouter);
 
 // Global Error Handler
 app.use(errorHandler); 
