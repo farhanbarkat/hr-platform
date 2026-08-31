@@ -41,6 +41,7 @@ import taxSlabRouter from './src/routes/taxSlab.routes.js';
 import taxCertificateRouter from './src/routes/taxCertificate.routes.js';
 import financeRouter from './src/routes/finance.routes.js';
 import helpdeskRouter from './src/routes/helpdesk.routes.js';
+import chatRouter from './src/routes/chat.routes.js';
 
 const app = express();
 
@@ -128,6 +129,9 @@ app.use('/api/v1/tax-certificates', taxCertificateRouter);
 app.use('/api/v1/finance', financeRouter);
 
 app.use('/api/v1/helpdesk', helpdeskRouter);
+
+// Under your API v1 routes block:
+app.use('/api/v1/chat', chatRouter);
 
 // Global Error Handler
 app.use(errorHandler); 
