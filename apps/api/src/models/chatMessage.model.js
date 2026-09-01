@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+//chat one to one message schema
 const chatMessageSchema = new mongoose.Schema(
   {
     companyId: {
