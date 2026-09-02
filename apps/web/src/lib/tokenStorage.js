@@ -22,7 +22,24 @@ export const tokenStorage = {
     }
   },
 
-  clearTokens: () => {
+  getUser: () => {
+    try {
+      const user = localStorage.getItem('auth_user');
+      return user ? JSON.parse(user) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  setUser: (user) => {
+    if (user) {
+      localStorage.setItem('auth_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('auth_user');
+    }
+  },
+
+  clearAll: () => {
     inMemoryAccessToken = null;
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
