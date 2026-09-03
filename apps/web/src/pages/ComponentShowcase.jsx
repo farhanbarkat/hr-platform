@@ -1,96 +1,76 @@
-import React, { useState } from 'react';
-import { Sidebar, TopBar, Button } from '@repo/ui';
-
-const DashboardIcon = () => (
-  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-  </svg>
-);
-const TenantIcon = () => (
-  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16" />
-  </svg>
-);
+import React from 'react';
+import { StatCard, AreaTrendChart, DonutChart } from '@repo/ui';
 
 export default function ComponentShowcase() {
-  const [activeSuper, setActiveSuper] = useState('tenants');
-  const [searchValue, setSearchValue] = useState('');
-  const [unreadCount, setUnreadCount] = useState(4);
+  const xMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+  const trendSeries = [
+    { name: 'Active Companies', color: '#B9812E', data: [12, 18, 25, 34, 45, 60, 72, 85] },
+    { name: 'Total Headcount', color: '#16233B', data: [120, 240, 390, 520, 780, 1100, 1420, 1890] },
+  ];
 
-  const superAdminSidebarProps = {
-    productName: 'PLATFORM CORE',
-    subtitle: 'SUPER ADMIN',
-    badgeText: 'PROD V1.0.0',
-    navItems: [
-      { id: 'overview', label: 'System Overview', icon: <DashboardIcon />, active: activeSuper === 'overview', onClick: () => setActiveSuper('overview') },
-      { id: 'tenants', label: 'Tenant Directory', icon: <TenantIcon />, active: activeSuper === 'tenants', onClick: () => setActiveSuper('tenants'), badge: '12' },
-    ],
-    user: { name: 'System Root', email: 'root@platform.io', initials: 'SR' },
-    onLogout: () => alert('Logout clicked'),
-  };
+  const planDistribution = [
+    { label: 'Enterprise', value: 45, percent: '45.0%', color: '#B9812E' },
+    { label: 'Professional', value: 35, percent: '35.0%', color: '#16233B' },
+    { label: 'Starter', value: 20, percent: '20.0%', color: '#5B6B79' },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#F6F5F1] p-6 space-y-8">
+    <div className="min-h-screen bg-[#F6F5F1] p-8 space-y-8">
       <div>
         <h1 className="text-xl font-bold font-mono text-[#16233B]">
-          SA-FE-002: Top Bar Component Verification
+          SA-FE-003, SA-FE-004, SA-FE-005 Component Verification
         </h1>
         <p className="text-xs font-mono text-[#5B6B79] mt-1">
-          Paper background (#F6F5F1) + Ledger border (#D8D3C7) + Fully prop-driven controls
+          Stat Cards + Two-Series Area Trend Chart + Donut Chart with Legend
         </p>
       </div>
 
-      {/* TopBar Variant 1 */}
-      <div className="border border-[#D8D3C7] rounded-[8px] overflow-hidden bg-white shadow-xs">
-        <div className="bg-[#E4E0D5] px-4 py-1.5 text-[11px] font-mono font-bold text-[#16233B]">
-          Variant 1: Super Admin TopBar (Unread Badge: {unreadCount} + Help)
-        </div>
-        <TopBar
-          searchPlaceholder="Search system tenants, audit logs..."
-          searchValue={searchValue}
-          onSearchChange={setSearchValue}
-          unreadCount={unreadCount}
-          onNotificationsClick={() => setUnreadCount(0)}
-          onHelpClick={() => alert('Opening Help Modal')}
+      {/* SA-FE-003: Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Tenants"
+          value="128"
+          deltaText="+12% vs last month"
+          deltaVariant="success"
+          caption="Active organizations"
+        />
+        <StatCard
+          label="System Health"
+          value="99.98%"
+          deltaText="Normal"
+          deltaVariant="neutral"
+          caption="All services operational"
+        />
+        <StatCard
+          label="Pending Audits"
+          value="14"
+          deltaText="3 High-Priority"
+          deltaVariant="error"
+          caption="Requires immediate action"
+        />
+        <StatCard
+          label="API Usage"
+          value="84.2%"
+          deltaText="Near Limit"
+          deltaVariant="warning"
+          caption="Rate threshold warning"
         />
       </div>
 
-      {/* TopBar Variant 2 */}
-      <div className="border border-[#D8D3C7] rounded-[8px] overflow-hidden bg-white shadow-xs">
-        <div className="bg-[#E4E0D5] px-4 py-1.5 text-[11px] font-mono font-bold text-[#16233B]">
-          Variant 2: Company Admin TopBar with Action Button
+      {/* SA-FE-004 & SA-FE-005: Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <AreaTrendChart
+            title="Tenant Growth & Headcount Trend"
+            xLabels={xMonths}
+            series={trendSeries}
+          />
         </div>
-        <TopBar
-          searchPlaceholder="Search employees by name, ID or department..."
-          showNotifications={true}
-          unreadCount={0}
-          showHelp={false}
-          actions={
-            <Button variant="primary" className="text-xs py-1.5 px-3">
-              + Add Employee
-            </Button>
-          }
-        />
-      </div>
-
-      {/* Full Integrated Shell */}
-      <div className="border border-[#D8D3C7] rounded-[8px] overflow-hidden shadow-xs">
-        <div className="bg-[#E4E0D5] px-4 py-1.5 text-[11px] font-mono font-bold text-[#16233B]">
-          Variant 3: Combined Shell (Sidebar + TopBar + Main Area)
-        </div>
-        <div className="flex h-[420px]">
-          <Sidebar {...superAdminSidebarProps} />
-          <div className="flex-1 flex flex-col min-w-0">
-            <TopBar
-              searchPlaceholder="Quick jump to tenant..."
-              unreadCount={2}
-            />
-            <main className="flex-1 p-6 bg-[#F6F5F1] overflow-y-auto">
-              <div className="border-2 border-dashed border-[#D8D3C7] rounded-[8px] h-full flex items-center justify-center text-xs font-mono text-[#5B6B79]">
-                Main Workspace Content Area
-              </div>
-            </main>
-          </div>
+        <div>
+          <DonutChart
+            title="Plan Tier Distribution"
+            segments={planDistribution}
+          />
         </div>
       </div>
     </div>
