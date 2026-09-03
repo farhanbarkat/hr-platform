@@ -4,14 +4,14 @@ import LoginScreen from './features/auth/LoginScreen.jsx';
 import ComponentShowcase from './pages/ComponentShowcase.jsx';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import SuperAdminLayout from './features/superAdmin/SuperAdminLayout.jsx';
+import BillingInvoices from './features/superAdmin/BillingInvoices.jsx';
+import AuditLogs from './features/superAdmin/AuditLogs.jsx';
+import PlansTiers from './features/superAdmin/PlansTiers.jsx';
 
 export default function App() {
   return (
     <Routes>
-      {/* Public Auth Route */}
       <Route path="/login" element={<LoginScreen />} />
-
-      {/* Dev Component Showcase */}
       <Route path="/dev/components" element={<ComponentShowcase />} />
 
       {/* Super Admin Protected Enclave */}
@@ -23,11 +23,13 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-
+        <Route index element={<Navigate to="/admin/billing" replace />} />
+        <Route path="plans" element={<PlansTiers />} />
+        <Route path="billing" element={<BillingInvoices />} />
+        <Route path="audit" element={<AuditLogs />} />
       </Route>
 
-      {/* Fallback & Redirects */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Navigate to="/admin/billing" replace />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
