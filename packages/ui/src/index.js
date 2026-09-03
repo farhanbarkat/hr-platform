@@ -5,4 +5,5 @@ export { Card, NotchedStatCard, ListItemCard } from './components/Card.jsx';
 export { Modal } from './components/Modal.jsx';
 export { Table, TableHead, TableBody, TableRow, TableCell } from './components/Table.jsx';
 export { cn } from './utils/utils.js';
-export * from './components/Sidebar.jsx';
+export { Sidebar } from './components/Sidebar.jsx';
+export { TopBar } from './components/TopBar.jsx';

@@ -40,7 +40,7 @@ export default function ComponentShowcase() {
         </p>
       </div>
 
-      {/* TopBar Variant 1 */}
+      {/* TopBar Showcase 1: Super Admin TopBar */}
       <div className="border border-[#D8D3C7] rounded-[8px] overflow-hidden bg-white shadow-xs">
         <div className="bg-[#E4E0D5] px-4 py-1.5 text-[11px] font-mono font-bold text-[#16233B]">
           Variant 1: Super Admin TopBar (Unread Badge: {unreadCount} + Help)
@@ -55,10 +55,10 @@ export default function ComponentShowcase() {
         />
       </div>
 
-      {/* TopBar Variant 2 */}
+      {/* TopBar Showcase 2: Company Admin TopBar with Action Button */}
       <div className="border border-[#D8D3C7] rounded-[8px] overflow-hidden bg-white shadow-xs">
         <div className="bg-[#E4E0D5] px-4 py-1.5 text-[11px] font-mono font-bold text-[#16233B]">
-          Variant 2: Company Admin TopBar with Action Button
+          Variant 2: Company Admin TopBar with Custom Action Button
         </div>
         <TopBar
           searchPlaceholder="Search employees by name, ID or department..."
@@ -73,7 +73,7 @@ export default function ComponentShowcase() {
         />
       </div>
 
-      {/* Full Integrated Shell */}
+      {/* Integrated Full Layout Shell Test */}
       <div className="border border-[#D8D3C7] rounded-[8px] overflow-hidden shadow-xs">
         <div className="bg-[#E4E0D5] px-4 py-1.5 text-[11px] font-mono font-bold text-[#16233B]">
           Variant 3: Combined Shell (Sidebar + TopBar + Main Area)
