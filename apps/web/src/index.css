@@ -1,8 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
-@source "../../packages/ui/src";
-@source "./";
+/* Point explicitly to packages/ui and apps/web */
+@source "../../../packages/ui/src/**/*.{js,jsx,ts,tsx}";
+@source "../../packages/ui/src/**/*.{js,jsx,ts,tsx}";
+@source "./**/*.{js,jsx,ts,tsx}";
 
 @theme {
   --color-ink: #16233B;
