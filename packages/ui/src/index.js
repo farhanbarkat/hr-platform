@@ -7,3 +7,6 @@ export { Table, TableHead, TableBody, TableRow, TableCell } from './components/T
 export { cn } from './utils/utils.js';
 export { Sidebar } from './components/Sidebar.jsx';
 export { TopBar } from './components/TopBar.jsx';
+export { DonutChart } from './components/DonutChart.jsx';
+export { AreaTrendChart } from './components/AreaTrendChart.jsx';
+export { StatCard } from './components/StatCard.jsx';
