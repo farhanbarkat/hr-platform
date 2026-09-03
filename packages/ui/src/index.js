@@ -10,3 +10,4 @@ export { TopBar } from './components/TopBar.jsx';
 export { DonutChart } from './components/DonutChart.jsx';
 export { AreaTrendChart } from './components/AreaTrendChart.jsx';
 export { StatCard } from './components/StatCard.jsx';
+export { DataTable } from './components/DataTable.jsx';
