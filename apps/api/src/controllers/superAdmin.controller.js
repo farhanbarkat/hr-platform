@@ -122,25 +122,38 @@ export const toggleCompanyStatus = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'isActive boolean flag is required.');
   }
 
+  // strict: false lagane se Mongoose field ko discard nahi karega
   const company = await Company.findByIdAndUpdate(
     id,
-    { isActive },
-    { new: true }
+    {
+      $set: {
+        isActive: isActive,
+        status: isActive ? 'ACTIVE' : 'SUSPENDED',
+      },
+    },
+    { 
+      returnDocument: 'after', 
+      strict: false // 👈 Crucial: Disables schema stripping
+    }
   );
 
   if (!company) {
     throw new ApiError(404, 'Company not found.');
   }
 
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        { company },
-        `Company successfully ${isActive ? 'activated' : 'deactivated'}.`
-      )
-    );
+  console.log('✅ Updated Company in DB:', {
+    id: company._id,
+    isActive: company.isActive,
+    status: company.status,
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { company },
+      `Company successfully ${isActive ? 'activated' : 'deactivated'}.`
+    )
+  );
 });
 
 /**

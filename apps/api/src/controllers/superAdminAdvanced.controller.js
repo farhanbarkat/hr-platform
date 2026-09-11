@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import redis from '../db/redis.js';
+import { systemConfig } from '../services/systemConfig.service.js';
 import { Plan } from '../models/plan.model.js';
 import { BillingRecord } from '../models/billingRecord.model.js';
 import { PlatformSupportTicket } from '../models/platformSupportTicket.model.js';
@@ -246,9 +248,9 @@ export const updateSupportTicket = asyncHandler(async (req, res) => {
   if (adminNotes) updateData.adminNotes = adminNotes;
 
   const ticket = await PlatformSupportTicket.findByIdAndUpdate(id, updateData, {
-    new: true,
-    runValidators: true,
-  });
+  returnDocument: 'after',
+  runValidators: true,
+});
   if (!ticket) throw new ApiError(404, 'Support ticket not found.');
 
   return res.status(200).json(new ApiResponse(200, ticket, 'Support ticket updated.'));
@@ -263,16 +265,20 @@ export const getPlatformSettings = asyncHandler(async (req, res) => {
 });
 
 export const updatePlatformSetting = asyncHandler(async (req, res) => {
+  // Case 1: Bulk Settings update (from "DEPLOY UPDATES" button)
+  if (Array.isArray(req.body.settings)) {
+    await systemConfig.setBulkSettings(req.body.settings);
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, 'Platform configuration deployed across cluster.'));
+  }
+
+  // Case 2: Single Setting update
   const { key, value, description, isPublic } = req.body;
   if (!key || value === undefined) {
     throw new ApiError(400, 'Setting key and value are required.');
   }
 
-  const setting = await PlatformSetting.findOneAndUpdate(
-    { key },
-    { key, value, ...(description && { description }), ...(isPublic !== undefined && { isPublic }) },
-    { upsert: true, new: true }
-  );
-
-  return res.status(200).json(new ApiResponse(200, setting, 'Setting updated successfully.'));
+  const doc = await systemConfig.setSetting(key, value, description, isPublic);
+  return res.status(200).json(new ApiResponse(200, doc, 'Setting synced successfully.'));
 });

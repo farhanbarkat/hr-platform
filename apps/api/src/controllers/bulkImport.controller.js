@@ -6,6 +6,20 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 const ASYNC_THRESHOLD = 100;
 
+
+/**
+ * @desc    Download CSV Template for Bulk Employee Import
+ * @route   GET /api/v1/employees/bulk-import/template
+ */
+export const downloadEmployeeTemplate = asyncHandler(async (req, res) => {
+  const csvHeaders = 'firstName,lastName,email,cnic,employeeId,department,designation,dateOfJoining,employmentStatus,phone,address\n';
+  const csvSample = 'Ali,Khan,ali.khan@cloudlogic.com,35201-1234567-1,EMP-2026-050,Marketing,Associate Consultant,2026-02-01,ACTIVE,03001234567,Lahore\n';
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="employee_bulk_import_template.csv"');
+  return res.status(200).send(csvHeaders + csvSample);
+});
+
 /**
  * @desc    Bulk Import Employees via CSV
  * @route   POST /api/v1/employees/bulk-import

@@ -33,4 +33,4 @@ router.post(
 // Preview audit breakdown
 router.get('/preview', previewSalaryCalculation);
 
-export default router;
+export default router;  

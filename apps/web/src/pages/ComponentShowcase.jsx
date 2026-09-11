@@ -1,52 +1,40 @@
-import React, { useState } from 'react';
-import PlansTiers from '../features/superAdmin/PlansTiers.jsx';
-import BillingInvoices from '../features/superAdmin/BillingInvoices.jsx';
-import AuditLogs from '../features/superAdmin/AuditLogs.jsx';
+import React, { useState, useEffect } from 'react';
+import { Sidebar, TopBar } from '@repo/ui';
+import PlatformTelemetry from '../features/superAdmin/PlatformTelemetry.jsx';
 
 export default function ComponentShowcase() {
-  const [activeTab, setActiveTab] = useState('plans');
+  const [activeTab, setActiveTab] = useState('telemetry');
+
+  const navItems = [
+    { id: 'telemetry', label: 'Platform Telemetry', active: activeTab === 'telemetry', onClick: () => setActiveTab('telemetry') },
+    { id: 'tenants', label: 'Tenant Management', active: activeTab === 'tenants', onClick: () => setActiveTab('tenants') },
+    { id: 'plans', label: 'Plans & Tiers', active: activeTab === 'plans', onClick: () => setActiveTab('plans') },
+    { id: 'billing', label: 'Billing & Invoices', active: activeTab === 'billing', onClick: () => setActiveTab('billing') },
+    { id: 'audit', label: 'Audit Logs', active: activeTab === 'audit', onClick: () => setActiveTab('audit') },
+    { id: 'support', label: 'Support Desk', active: activeTab === 'support', onClick: () => setActiveTab('support') },
+    { id: 'settings', label: 'System Settings', active: activeTab === 'settings', onClick: () => setActiveTab('settings') },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#F6F5F1] p-6 space-y-6">
-      {/* Tab Switcher */}
-      <div className="flex items-center justify-between border-b border-[#D8D3C7] pb-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('plans')}
-            className={`px-3 py-1.5 rounded-[6px] text-xs font-mono font-bold transition-colors ${
-              activeTab === 'plans' ? 'bg-[#16233B] text-white' : 'bg-white text-[#5B6B79] border border-[#D8D3C7]'
-            }`}
-          >
-            SA-FE-009: Plans & Tiers
-          </button>
-          <button
-            onClick={() => setActiveTab('billing')}
-            className={`px-3 py-1.5 rounded-[6px] text-xs font-mono font-bold transition-colors ${
-              activeTab === 'billing' ? 'bg-[#16233B] text-white' : 'bg-white text-[#5B6B79] border border-[#D8D3C7]'
-            }`}
-          >
-            SA-FE-010: Billing & Invoices
-          </button>
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`px-3 py-1.5 rounded-[6px] text-xs font-mono font-bold transition-colors ${
-              activeTab === 'audit' ? 'bg-[#16233B] text-white' : 'bg-white text-[#5B6B79] border border-[#D8D3C7]'
-            }`}
-          >
-            SA-FE-011: Audit Logs (Full)
-          </button>
-        </div>
+    <div className="flex min-h-screen bg-[#F6F5F1] text-[#16233B]">
+      <Sidebar
+        productName="PLATFORM CORE"
+        subtitle="SUPER ADMIN"
+        badgeText="PROD V1.0.0"
+        navItems={navItems}
+        user={{
+          name: 'Alex Vance',
+          email: 'alex.v@platform.io',
+          initials: 'AV',
+        }}
+        onLogout={() => alert('Logout clicked')}
+      />
 
-        <span className="text-xs font-mono text-[#5B6B79]">
-          Suite Verification Mode
-        </span>
-      </div>
-
-      {/* Render Active Feature Screen */}
-      <div className="bg-white p-6 border border-[#D8D3C7] rounded-[8px] shadow-2xs">
-        {activeTab === 'plans' && <PlansTiers />}
-        {activeTab === 'billing' && <BillingInvoices />}
-        {activeTab === 'audit' && <AuditLogs />}
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopBar searchPlaceholder="Search commands..." />
+        <main className="flex-1 p-8 overflow-y-auto">
+          <PlatformTelemetry />
+        </main>
       </div>
     </div>
   );

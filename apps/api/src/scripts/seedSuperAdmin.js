@@ -1,23 +1,21 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 import { User } from '../models/user.model.js';
 import { Company } from '../models/company.model.js';
 
-// Load environment variables (.env file)
 dotenv.config({ path: './.env' });
 
 const seedSuperAdmin = async () => {
   try {
     const mongoUri = process.env.MONGODB_URI;
-    if (!mongoUri) {
-      throw new Error('MONGODB_URI is not defined in environment variables.');
-    }
+    if (!mongoUri) throw new Error('MONGODB_URI missing');
 
     console.log('⏳ Connecting to Database...');
     await mongoose.connect(mongoUri);
     console.log('✅ Connected to MongoDB.');
 
-    // 1. Check/Create System Root Company
+    // 1. Ensure System Root Company
     let systemCompany = await Company.findOne({ slug: 'system-root' });
     if (!systemCompany) {
       systemCompany = await Company.create({
@@ -27,34 +25,37 @@ const seedSuperAdmin = async () => {
         timezone: 'UTC',
         isActive: true,
       });
-      console.log('✅ System Root Company created.');
     }
 
-    // 2. Check if Super Admin exists
     const superAdminEmail = (process.env.SUPERADMIN_EMAIL || 'superadmin@hrplatform.com').toLowerCase();
-    const existingSuperAdmin = await User.findOne({ email: superAdminEmail });
+    const plainPassword = 'SuperAdmin123!'; // Default password for seeding; should be changed after first login
 
-    if (existingSuperAdmin) {
-      console.log(`⚠️  Super Admin account (${superAdminEmail}) already exists!`);
-    } else {
-      const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin@123!';
+    // Hash manually with salt factor 10
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(plainPassword, salt);
 
-      await User.create({
-        firstName: 'System',
-        lastName: 'Admin',
-        email: superAdminEmail,
-        password: superAdminPassword,
-        role: 'SUPER_ADMIN',
-        companyId: systemCompany._id,
-        isEmailVerified: true,
-      });
+    // Use updateOne with upsert to bypass pre-save hooks completely
+    await User.updateOne(
+      { email: superAdminEmail },
+      {
+        $set: {
+          firstName: 'System',
+          lastName: 'Admin',
+          password: hashedPassword,
+          role: 'SUPER_ADMIN',
+          companyId: systemCompany._id,
+          isEmailVerified: true,
+          isActive: true,
+        },
+      },
+      { upsert: true }
+    );
 
-      console.log('====================================================');
-      console.log('🚀 SUPER_ADMIN Account Created Successfully!');
-      console.log(`📧 Email:    ${superAdminEmail}`);
-      console.log(`🔑 Password: ${superAdminPassword}`);
-      console.log('====================================================');
-    }
+    console.log('====================================================');
+    console.log('🚀 Super Admin Password Forced Cleanly via Direct Mongo Update!');
+    console.log(`📧 Email:    ${superAdminEmail}`);
+    console.log(`🔑 Password: ${plainPassword}`);
+    console.log('====================================================');
   } catch (error) {
     console.error('❌ Error during seeding:', error.message);
   } finally {

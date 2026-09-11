@@ -339,3 +339,32 @@ export const registerDeviceToken = asyncHandler(async (req, res) => {
     new ApiResponse(200, { registered: true }, 'Device token registered successfully.')
   );
 });
+
+/**
+ * @desc    Get current authenticated session user & permissions
+ * @route   GET /api/v1/auth/me
+ * @access  Private (verifyJWT)
+ */
+export const getCurrentUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user?._id)
+    .populate('companyId', 'name slug country currency')
+    .lean();
+
+  if (!user) {
+    throw new ApiError(404, 'Active user session not found.');
+  }
+
+  // Remove sensitive security artifacts
+  delete user.password;
+  delete user.twoFactorSecret;
+  delete user.twoFactorRecoveryCodes;
+  delete user.refreshTokens;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      user,
+      'Current authenticated user profile retrieved successfully.'
+    )
+  );
+});

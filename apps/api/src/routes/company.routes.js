@@ -12,19 +12,20 @@ const router = Router();
 
 // Inline Admin Check Guard
 const requireAdmin = (req, res, next) => {
-  if (!['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) {
+  const role = req.user?.role;
+  if (!['COMPANY_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(role)) {
     throw new ApiError(403, 'Forbidden: Admin access required.');
   }
   next();
 };
 
-// Route to onboard new tenant
-router.route('/').post(createCompany);
+// Route to onboard new tenant (Super Admin only or initial setup)
+router.route('/').post(verifyJWT, requireAdmin, createCompany);
 
-// Tenant-scoped route
-router.route('/me').get(tenantMiddleware, getCurrentCompany);
+// FIX 1: verifyJWT must run BEFORE tenantMiddleware so req.user is hydrated
+router.route('/me').get(verifyJWT, tenantMiddleware, getCurrentCompany);
 
-// Admin-only configurable settings (TICKET-017 AC-1)
+// Admin-only configurable settings
 router
   .route('/settings')
   .put(verifyJWT, tenantMiddleware, requireAdmin, updateCompanySettings)

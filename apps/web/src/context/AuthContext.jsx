@@ -1,31 +1,71 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { apiClient } from '../lib/apiClient.js';
 import { tokenStorage } from '../lib/tokenStorage.js';
+import { getDefaultPermissionsForRole, hasUserPermission } from '../config/permissions.js';
 
 export const AuthContext = createContext(null);
+
+// Dynamic Role-Based Landing Engine
+export const resolveHomeRoute = (user) => {
+  if (!user) return '/login';
+
+  const role = String(user.role || '').trim().toUpperCase();
+
+  if (role === 'SUPER_ADMIN') {
+    return '/super-admin/telemetry';
+  }
+
+  if (['COMPANY_ADMIN', 'ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+    return '/company-admin/overview';
+  }
+
+  if (['MANAGER', 'SUPERVISOR'].includes(role)) {
+    return '/company-admin/overview';
+  }
+
+  return '/employee/dashboard';
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => tokenStorage.getUser());
   const [token, setToken] = useState(() => tokenStorage.getAccessToken());
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const initAuth = () => {
-      const storedToken = tokenStorage.getAccessToken();
-      const storedUser = tokenStorage.getUser();
+  // 1. Initial Session Hydration & Sync with Backend
+  const hydrateSession = useCallback(async () => {
+    const storedToken = tokenStorage.getAccessToken();
+    if (!storedToken) {
+      setUser(null);
+      setToken(null);
+      setLoading(false);
+      return;
+    }
 
-      if (storedToken && storedUser) {
-        setUser(storedUser);
-        setToken(storedToken);
-      } else {
-        tokenStorage.clearAll();
+    try {
+      // Fetch current profile & fresh permissions array from /auth/me
+      const res = await apiClient.get('/auth/me');
+      const payload = res.data?.data || res.data;
+      const freshUser = payload.user || payload;
+
+      if (freshUser) {
+        setUser(freshUser);
+        tokenStorage.setUser(freshUser);
+      }
+    } catch (err) {
+      console.warn('Session hydration failed; evaluating cached profile:', err.message);
+      const cached = tokenStorage.getUser();
+      if (!cached) {
+        tokenStorage.clearTokens();
         setUser(null);
         setToken(null);
       }
-      setIsLoading(false);
-    };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    initAuth();
+  useEffect(() => {
+    hydrateSession();
 
     const handleSessionExpired = () => {
       logout();
@@ -33,119 +73,189 @@ export function AuthProvider({ children }) {
 
     window.addEventListener('auth:session-expired', handleSessionExpired);
     return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
-  }, []);
+  }, [hydrateSession]);
 
+ // 2. Login Flow (DO NOT set global loading=true here!)
   const login = async (email, password) => {
     try {
       const response = await apiClient.post('/auth/login', { email, password });
-      const { data } = response.data;
+      const payload = response.data?.data || response.data || {};
 
-      // Agar role/user ke liye 2FA required hai
-      if (data.requires2FA) {
-        let setupData = null;
-
-        // Agar user pehle se enrolled nahi hai (first time setup)
-        if (!data.isEnrolled) {
-          try {
-            const setupRes = await apiClient.post(
-              '/auth/2fa/setup',
-              {},
-              { headers: { Authorization: `Bearer ${data.challengeToken}` } }
-            );
-            setupData = setupRes.data?.data;
-          } catch (e) {
-            console.error('2FA setup init error:', e);
-          }
-        }
-
+      // 2FA Challenge (First-time Enrollment ya Normal OTP)
+      if (payload.requires2FA || payload.challengeToken || payload.mfaRequired) {
         return {
           requires2FA: true,
-          challengeToken: data.challengeToken,
-          isEnrolled: data.isEnrolled,
-          qrCodeUrl: setupData?.qrCodeUrl || null,
-          secret: setupData?.secret || null,
+          challengeToken: payload.challengeToken || payload.tempToken,
+          isEnrolled: payload.isEnrolled ?? (payload.qrCode ? false : true),
+          qrCode: payload.qrCode || payload.qrCodeDataUrl || null,
+          secret: payload.secret || null,
         };
       }
 
-      // Normal direct login
-      tokenStorage.setAccessToken(data.accessToken);
-      tokenStorage.setRefreshToken(data.refreshToken);
-      tokenStorage.setUser(data.user);
+      const accessToken = payload.accessToken || payload.token;
+      const refreshToken = payload.refreshToken;
+      let userData = payload.user || payload.employee;
 
-      setUser(data.user);
-      setToken(data.accessToken);
+      if (!accessToken || !userData) {
+        throw new Error('Malformed login response: Missing token or user object.');
+      }
 
-      return { requires2FA: false, user: data.user };
-    } catch {
-      throw new Error('Email or password is incorrect.');
+      if (!Array.isArray(userData.permissions) || userData.permissions.length === 0) {
+        userData.permissions = getDefaultPermissionsForRole(userData.role);
+      }
+
+      tokenStorage.setAccessToken(accessToken);
+      if (refreshToken) tokenStorage.setRefreshToken(refreshToken);
+      tokenStorage.setUser(userData);
+
+      setToken(accessToken);
+      setUser(userData);
+
+      return {
+        requires2FA: false,
+        user: userData,
+        homeRoute: resolveHomeRoute(userData),
+      };
+    } catch (error) {
+      throw error;
     }
   };
-
- const verify2FA = async (challengeToken, code, isEnrolled = true) => {
+  
+  // 3. 2FA Verification Flow
+  const verify2FA = async (challengeToken, code, isEnrolled = true) => {
+    setLoading(true);
     try {
-      // Backend routes: /auth/2fa/confirm (first time) ya /auth/2fa/verify-login (already enrolled)
       const endpoint = !isEnrolled ? '/auth/2fa/confirm' : '/auth/2fa/verify-login';
-      
+      const cleanCode = String(code).trim();
+
       const response = await apiClient.post(
         endpoint,
-        { code },
+        { totpToken: cleanCode, code: cleanCode },
         { headers: { Authorization: `Bearer ${challengeToken}` } }
       );
 
-      const { data } = response.data;
+      const payload = response.data?.data || response.data || {};
+      const accessToken = payload.accessToken || payload.token;
+      let userData = payload.user;
 
-      if (data?.accessToken) {
-        tokenStorage.setAccessToken(data.accessToken);
-        tokenStorage.setRefreshToken(data.refreshToken);
-        tokenStorage.setUser(data.user);
+      if (accessToken && userData) {
+        if (!Array.isArray(userData.permissions) || userData.permissions.length === 0) {
+          userData.permissions = getDefaultPermissionsForRole(userData.role);
+        }
 
-        setUser(data.user);
-        setToken(data.accessToken);
+        tokenStorage.setAccessToken(accessToken);
+        if (payload.refreshToken) tokenStorage.setRefreshToken(payload.refreshToken);
+        tokenStorage.setUser(userData);
+
+        setToken(accessToken);
+        setUser(userData);
       }
 
-      return data?.user;
-    } catch {
-      throw new Error('Invalid or expired verification code. Please try again.');
+      setLoading(false);
+      return { user: userData, homeRoute: resolveHomeRoute(userData) };
+    } catch (err) {
+      setLoading(false);
+      throw err;
     }
   };
 
+  // 4. Logout Flow
   const logout = () => {
-    tokenStorage.clearAll();
+    tokenStorage.clearTokens();
     setUser(null);
     setToken(null);
+    window.location.href = '/login';
   };
 
-  const hasPermission = (permission) => {
-    if (!user) return false;
-    if (user.role === 'SUPER_ADMIN') return true;
-    if (!Array.isArray(user.permissions)) return false;
-    return user.permissions.includes(permission);
-  };
+  // -------------------------------------------------------------
+  // RBAC Permission Engine ('resource.action' format)
+  // -------------------------------------------------------------
+  const isSuperAdmin = useMemo(() => {
+    return String(user?.role || '').trim().toUpperCase() === 'SUPER_ADMIN';
+  }, [user]);
 
-  const hasAnyPermission = (permissions = []) => {
-    if (!user) return false;
-    if (user.role === 'SUPER_ADMIN') return true;
-    if (!Array.isArray(user.permissions)) return false;
-    return permissions.some((p) => user.permissions.includes(p));
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isLoading,
-        isAuthenticated: !!token && !!user,
-        login,
-        verify2FA,
-        logout,
-        hasPermission,
-        hasAnyPermission,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  /**
+   * Evaluates if authenticated user has permission string (e.g. 'payroll.read')
+   */
+  const hasPermission = useCallback(
+    (requiredPermission) => {
+      if (!user) return false;
+      return hasUserPermission(user, requiredPermission);
+    },
+    [user]
   );
+
+  /**
+   * Evaluates if user possesses AT LEAST ONE permission from the array
+   */
+  const hasAnyPermission = useCallback(
+    (permissions = []) => {
+      if (!user) return false;
+      if (isSuperAdmin) return true;
+      if (!Array.isArray(permissions) || permissions.length === 0) return true;
+      return permissions.some((perm) => hasPermission(perm));
+    },
+    [user, isSuperAdmin, hasPermission]
+  );
+
+  /**
+   * Evaluates if user possesses ALL required permissions
+   */
+  const hasAllPermissions = useCallback(
+    (permissions = []) => {
+      if (!user) return false;
+      if (isSuperAdmin) return true;
+      if (!Array.isArray(permissions) || permissions.length === 0) return true;
+      return permissions.every((perm) => hasPermission(perm));
+    },
+    [user, isSuperAdmin, hasPermission]
+  );
+
+  /**
+   * Case-insensitive Role Matcher
+   */
+  const hasRole = useCallback(
+    (roleOrRoles) => {
+      if (!user) return false;
+      const currentRole = String(user.role || '').trim().toUpperCase();
+      if (Array.isArray(roleOrRoles)) {
+        return roleOrRoles.map((r) => String(r).trim().toUpperCase()).includes(currentRole);
+      }
+      return currentRole === String(roleOrRoles).trim().toUpperCase();
+    },
+    [user]
+  );
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      isLoading: loading,
+      isAuthenticated: Boolean(token && user),
+      isSuperAdmin,
+      login,
+      verify2FA,
+      logout,
+      hasRole,
+      hasPermission,
+      hasAnyPermission,
+      hasAllPermissions,
+      resolveHomeRoute: () => resolveHomeRoute(user),
+    }),
+    [
+      user,
+      token,
+      loading,
+      isSuperAdmin,
+      hasRole,
+      hasPermission,
+      hasAnyPermission,
+      hasAllPermissions,
+    ]
+  );
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

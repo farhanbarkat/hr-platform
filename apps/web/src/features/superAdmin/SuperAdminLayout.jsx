@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar, TopBar } from '@repo/ui';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -50,15 +50,69 @@ export default function SuperAdminLayout() {
     sessionStorage.getItem('impersonation_active')
   );
 
+  // Routes mapped strictly to /super-admin to prevent redirect loops
   const navItems = [
-    { id: 'telemetry', label: 'Platform Telemetry', icon: <NavIcons.Telemetry />, active: location.pathname === '/admin/telemetry', onClick: () => navigate('/admin/telemetry') },
-    { id: 'tenants', label: 'Tenant Management', icon: <NavIcons.Tenants />, active: location.pathname.startsWith('/admin/tenants'), onClick: () => navigate('/admin/tenants') },
-    { id: 'plans', label: 'Plans & Tiers', icon: <NavIcons.Plans />, active: location.pathname === '/admin/plans', onClick: () => navigate('/admin/plans') },
-    { id: 'billing', label: 'Billing & Invoices', icon: <NavIcons.Billing />, active: location.pathname === '/admin/billing', onClick: () => navigate('/admin/billing') },
-    { id: 'audit', label: 'Audit Logs', icon: <NavIcons.Audit />, active: location.pathname === '/admin/audit', onClick: () => navigate('/admin/audit') },
-    { id: 'support', label: 'Support Desk', icon: <NavIcons.Support />, active: location.pathname === '/admin/support', onClick: () => navigate('/admin/support') },
-    { id: 'settings', label: 'System Settings', icon: <NavIcons.Settings />, active: location.pathname === '/admin/settings', onClick: () => navigate('/admin/settings') },
+    {
+      id: 'telemetry',
+      label: 'Platform Telemetry',
+      icon: <NavIcons.Telemetry />,
+      active: location.pathname === '/super-admin/telemetry' || location.pathname === '/super-admin',
+      onClick: () => navigate('/super-admin/telemetry'),
+    },
+    {
+      id: 'tenants',
+      label: 'Tenant Management',
+      icon: <NavIcons.Tenants />,
+      active: location.pathname.startsWith('/super-admin/tenants'),
+      onClick: () => navigate('/super-admin/tenants'),
+    },
+    {
+      id: 'plans',
+      label: 'Plans & Tiers',
+      icon: <NavIcons.Plans />,
+      active: location.pathname === '/super-admin/plans',
+      onClick: () => navigate('/super-admin/plans'),
+    },
+    {
+      id: 'billing',
+      label: 'Billing & Invoices',
+      icon: <NavIcons.Billing />,
+      active: location.pathname === '/super-admin/billing',
+      onClick: () => navigate('/super-admin/billing'),
+    },
+    {
+      id: 'audit',
+      label: 'Audit Logs',
+      icon: <NavIcons.Audit />,
+      active: location.pathname === '/super-admin/audit',
+      onClick: () => navigate('/super-admin/audit'),
+    },
+    {
+      id: 'support',
+      label: 'Support Desk',
+      icon: <NavIcons.Support />,
+      active: location.pathname === '/super-admin/support',
+      onClick: () => navigate('/super-admin/support'),
+    },
+    {
+      id: 'settings',
+      label: 'System Settings',
+      icon: <NavIcons.Settings />,
+      active: location.pathname === '/super-admin/settings',
+      onClick: () => navigate('/super-admin/settings'),
+    },
   ];
+
+  const userDisplayName =
+    user?.fullName ||
+    (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) ||
+    user?.name ||
+    'System Root';
+
+  const userInitials =
+    user?.firstName && user?.lastName
+      ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+      : 'SA';
 
   return (
     <div className="flex h-screen bg-[#F6F5F1] overflow-hidden">
@@ -68,9 +122,9 @@ export default function SuperAdminLayout() {
         badgeText="PROD V1.0.0"
         navItems={navItems}
         user={{
-          name: user?.fullName || user?.name || 'System Root',
+          name: userDisplayName,
           email: user?.email || 'root@platform.io',
-          initials: 'SA',
+          initials: userInitials,
         }}
         onLogout={logout}
       />

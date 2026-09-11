@@ -1,36 +1,246 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useAuth, resolveHomeRoute } from './context/AuthContext.jsx';
+import { ProtectedRoute } from './components/ProtectedRoute.jsx';
+import { PERMISSIONS } from './config/permissions.js';
+
 import LoginScreen from './features/auth/LoginScreen.jsx';
 import ComponentShowcase from './pages/ComponentShowcase.jsx';
-import { ProtectedRoute } from './components/ProtectedRoute.jsx';
+
+// Super Admin Layout & Views
 import SuperAdminLayout from './features/superAdmin/SuperAdminLayout.jsx';
+import PlatformTelemetry from './features/superAdmin/PlatformTelemetry.jsx';
+import TenantManagement from './features/superAdmin/TenantManagement.jsx';
+import PlansTiers from './features/superAdmin/PlansTiers.jsx';
 import BillingInvoices from './features/superAdmin/BillingInvoices.jsx';
 import AuditLogs from './features/superAdmin/AuditLogs.jsx';
-import PlansTiers from './features/superAdmin/PlansTiers.jsx';
+import SupportDesk from './features/superAdmin/SupportDesk.jsx';
+import SystemSettings from './features/superAdmin/SystemSettings.jsx';
+
+// Company Admin Layout & Views
+import AppSidebar from './components/AppSidebar.jsx';
+import ExecutiveOverview from './features/admin/ExecutiveOverview.jsx';
+import WorkforceDirectory from './features/admin/WorkforceDirectory.jsx';
+import DepartmentsShifts from './features/admin/DepartmentsShifts.jsx';
+import LeaveOperations from './features/admin/LeaveOperations.jsx';
+import AttendanceTracking from './features/admin/TimeAttendance.jsx';
+import PayrollCompensation from './features/admin/PayrollCompensation.jsx';
+import CompanyFinance from './features/admin/CompanyFinance.jsx';
+import OrganizationSettings from './features/admin/OrganizationSettings.jsx';
+import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
+
+// Public Route Guard (Already authenticated users ko unke landing page par redirect karta hai)
+function PublicOnlyRoute({ children }) {
+  const { user, isAuthenticated, loading, resolveHomeRoute: getHome } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#F7F6F2] font-mono text-xs text-[#B9812E]">
+        Verifying platform session...
+      </div>
+    );
+  }
+
+  if (isAuthenticated && user) {
+    return <Navigate to={getHome ? getHome() : resolveHomeRoute(user)} replace />;
+  }
+
+  return children;
+}
+
+// Company Admin Shell Layout
+function CompanyAdminShell() {
+  return (
+    <div className="flex min-h-screen bg-[#F7F6F2]">
+      <AppSidebar />
+      <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
 
 export default function App() {
+  const { user, isAuthenticated, loading, resolveHomeRoute: getHome } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#F7F6F2] font-mono text-xs text-[#B9812E]">
+        Loading application enclave...
+      </div>
+    );
+  }
+
   return (
     <Routes>
-      <Route path="/login" element={<LoginScreen />} />
+      {/* 1. Public Authentication Route */}
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <LoginScreen />
+          </PublicOnlyRoute>
+        }
+      />
+
       <Route path="/dev/components" element={<ComponentShowcase />} />
 
-      {/* Super Admin Protected Enclave */}
+      {/* 2. Super Admin Protected Routes */}
       <Route
-        path="/admin"
+        path="/super-admin"
         element={
-          <ProtectedRoute requiredRole="SUPER_ADMIN">
+          <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
             <SuperAdminLayout />
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/admin/billing" replace />} />
+        <Route index element={<Navigate to="/super-admin/telemetry" replace />} />
+        <Route path="telemetry" element={<PlatformTelemetry />} />
+        <Route path="tenants" element={<TenantManagement />} />
         <Route path="plans" element={<PlansTiers />} />
         <Route path="billing" element={<BillingInvoices />} />
         <Route path="audit" element={<AuditLogs />} />
+        <Route path="support" element={<SupportDesk />} />
+        <Route path="settings" element={<SystemSettings />} />
       </Route>
 
-      <Route path="/" element={<Navigate to="/admin/billing" replace />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* 3. Company Admin Protected Routes (Granular Permission Gates) */}
+      <Route
+        path="/company-admin"
+        element={
+          <ProtectedRoute allowedRoles={['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR_MANAGER', 'HR', 'MANAGER']}>
+            <CompanyAdminShell />
+          </ProtectedRoute>
+        }
+      >
+        {/* Default Overview Landing */}
+        <Route index element={<Navigate to="/company-admin/overview" replace />} />
+        <Route path="overview" element={<ExecutiveOverview />} />
+
+        {/* Workforce Directory: employee.read */}
+        <Route
+          path="employees"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.EMPLOYEE.READ}>
+              <WorkforceDirectory />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Roles & Delegation Engine: Company Admin / Super Admin Delegation */}
+        <Route
+          path="roles-capabilities"
+          element={
+            <ProtectedRoute
+              allowedRoles={['COMPANY_ADMIN', 'SUPER_ADMIN']}
+              requiredPermissions={[PERMISSIONS.COMPANY.CONFIGURE]}
+            >
+              <RoleCapabilityManager />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Departments & Shifts: company.read */}
+        <Route
+          path="departments"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.COMPANY.READ}>
+              <DepartmentsShifts />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Attendance Tracking: attendance.read */}
+        <Route
+          path="attendance"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.ATTENDANCE.READ}>
+              <AttendanceTracking />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Leave Operations: leave.view_team ya leave.read */}
+        <Route
+          path="leaves"
+          element={
+            <ProtectedRoute
+              requiredPermissions={[PERMISSIONS.LEAVE.VIEW_TEAM, PERMISSIONS.LEAVE.READ]}
+            >
+              <LeaveOperations />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Payroll & Compensation: payroll.read */}
+        <Route
+          path="payroll"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.PAYROLL.READ}>
+              <PayrollCompensation />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Company Finance: finance.view_dashboard */}
+        <Route
+          path="finance"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}>
+              <CompanyFinance />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Organization Settings: settings.read ya company.configure */}
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute
+              requiredPermissions={[PERMISSIONS.SETTINGS.READ, PERMISSIONS.COMPANY.CONFIGURE]}
+            >
+              <OrganizationSettings />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
+
+      {/* 4. Backward Compatibility Aliases for '/admin/*' */}
+      <Route
+        path="/admin/*"
+        element={
+          <Navigate
+            to={user ? (getHome ? getHome() : resolveHomeRoute(user)) : '/login'}
+            replace
+          />
+        }
+      />
+
+      {/* 5. Root Entry Point */}
+      <Route
+        path="/"
+        element={
+          isAuthenticated && user ? (
+            <Navigate
+              to={getHome ? getHome() : resolveHomeRoute(user)}
+              replace
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      {/* 6. Catch-All */}
+      <Route
+        path="*"
+        element={
+          <Navigate
+            to={user ? (getHome ? getHome() : resolveHomeRoute(user)) : '/login'}
+            replace
+          />
+        }
+      />
     </Routes>
   );
 }
