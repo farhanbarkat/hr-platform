@@ -1,16 +1,16 @@
 import axios from 'axios';
 import { tokenStorage } from './tokenStorage.js';
 
-// Base Axios instance pointing to backend v1 API routes
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+
 export const apiClient = axios.create({
-  baseURL: '/api/v1',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true,
 });
 
-// Refresh state & pending request queue
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -26,7 +26,7 @@ const processQueue = (error, token = null) => {
 };
 
 /**
- * Request Interceptor: Automatically attaches Bearer Access Token
+ * Request Interceptor: Injects Bearer Token & Active Tenant ID
  */
 apiClient.interceptors.request.use(
   (config) => {
@@ -34,34 +34,40 @@ apiClient.interceptors.request.use(
     if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Attach active company ID header if user belongs to tenant
+    const user = tokenStorage.getUser();
+    const companyId = user?.companyId || user?.company?._id;
+    if (companyId && !config.headers['x-tenant-id']) {
+      config.headers['x-tenant-id'] = companyId;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
 /**
- * Response Interceptor: Catches 401, silently refreshes token, and retries once
+ * Response Interceptor: 401 Silent Token Rotation
  */
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error?.config;
 
-    // Reject immediately if not 401 or if this request was already retried
-    if (!error.response || error.response.status !== 401 || originalRequest._retry) {
+    if (!originalRequest || !error.response || error.response.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
-    // Do not attempt token refresh on login or direct refresh calls
     if (
       originalRequest.url?.includes('/auth/login') ||
-      originalRequest.url?.includes('/auth/refresh')
+      originalRequest.url?.includes('/auth/refresh-token') ||
+      originalRequest.url?.includes('/auth/2fa')
     ) {
       return Promise.reject(error);
     }
 
     if (isRefreshing) {
-      // Queue concurrent requests while token refresh is executing
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
       })
@@ -77,44 +83,39 @@ apiClient.interceptors.response.use(
 
     try {
       const storedRefreshToken = tokenStorage.getRefreshToken();
-
       if (!storedRefreshToken) {
-        throw new Error('No refresh token available');
+        throw new Error('No refresh token present in secure storage');
       }
 
-      // Call backend refresh endpoint
-      const response = await axios.post('/api/v1/auth/refresh-token', {
-        refreshToken: storedRefreshToken,
-      }, {
-        headers: { 'Content-Type': 'application/json' },
-        withCredentials: true,
-      });
+      const response = await axios.post(
+        `${BASE_URL}/auth/refresh-token`,
+        { refreshToken: storedRefreshToken },
+        { headers: { 'Content-Type': 'application/json' }, withCredentials: true }
+      );
 
-      const { accessToken, refreshToken: newRefreshToken } = response.data?.data || {};
+      const payload = response.data?.data || response.data || {};
+      const newAccessToken = payload.accessToken || payload.token;
+      const newRefreshToken = payload.refreshToken;
 
-      if (!accessToken) {
-        throw new Error('Refresh response missing access token');
+      if (!newAccessToken) {
+        throw new Error('Access token missing from rotation response');
       }
 
-      // Store rotated tokens
-      tokenStorage.setAccessToken(accessToken);
+      tokenStorage.setAccessToken(newAccessToken);
       if (newRefreshToken) {
         tokenStorage.setRefreshToken(newRefreshToken);
       }
 
-      processQueue(null, accessToken);
-
-      // Retry original failed request
-      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+      processQueue(null, newAccessToken);
+      originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
       return apiClient(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
       tokenStorage.clearTokens();
 
-      // Clean redirect notification with session expired message
       window.dispatchEvent(
         new CustomEvent('auth:session-expired', {
-          detail: { message: 'Your session has expired. Please log in again.' },
+          detail: { message: 'Your security session has expired. Please authenticate again.' },
         })
       );
 
@@ -124,3 +125,5 @@ apiClient.interceptors.response.use(
     }
   }
 );
+
+export default apiClient;

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { NotificationService } from '../services/notification.service.js';
 import { AttendanceRecord } from '../models/attendance.model.js';
 import { Employee } from '../models/employee.model.js';
@@ -197,14 +198,25 @@ export const checkOut = asyncHandler(async (req, res) => {
  */
 export const getAttendanceRecords = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user?.companyId;
+
+  if (!companyId) {
+    throw new ApiError(400, 'Company context is missing.');
+  }
+
   const { employeeId, date, requiresReview, month } = req.query;
 
-  const filter = { companyId };
+  // Company ID matching (handles both ObjectId & string format)
+  const isObjectId = mongoose.Types.ObjectId.isValid(companyId);
+  const filter = {
+    companyId: isObjectId
+      ? { $in: [companyId, new mongoose.Types.ObjectId(companyId)] }
+      : companyId,
+  };
 
-  if (req.user.role === 'EMPLOYEE') {
+  if (req.user?.role === 'EMPLOYEE') {
     const employee = await Employee.findOne({
-      companyId,
-      $or: [{ userId: req.user._id }, { email: req.user.email.toLowerCase() }],
+      companyId: filter.companyId,
+      $or: [{ userId: req.user._id }, { email: req.user.email?.toLowerCase() }],
     });
     filter.employeeId = employee?._id;
   } else if (employeeId) {
@@ -213,11 +225,16 @@ export const getAttendanceRecords = asyncHandler(async (req, res) => {
 
   if (date) filter.date = date;
   if (requiresReview !== undefined) filter.requiresReview = requiresReview === 'true';
-  if (month) filter.date = { $regex: `^${month}` }; // Format: YYYY-MM
+  if (month) filter.date = { $regex: `^${month}` };
 
+  // strictPopulate: false crash hone se rokta hai
   const records = await AttendanceRecord.find(filter)
-    .populate('employeeId', 'firstName lastName employeeId department designation')
-    .sort({ date: -1, checkInTime: -1 });
+    .populate({
+      path: 'employeeId',
+      select: 'firstName lastName employeeId department designation email',
+      strictPopulate: false,
+    })
+    .sort({ createdAt: -1, checkInTime: -1 });
 
   return res.status(200).json(
     new ApiResponse(200, records, 'Attendance records retrieved successfully.')

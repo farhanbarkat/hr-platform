@@ -16,13 +16,20 @@ export const getDepartments = asyncHandler(async (req, res) => {
     query.isActive = true;
   }
 
+  // Safe Query: strictPopulate: false lagaya hai taake agar schema me field mismatch ho tab bhi server crash na ho
   const departments = await Department.find(query)
-    .populate('headEmployeeId', 'firstName lastName email designation')
+    .populate({
+      path: 'headOfDepartment', // Schema me exact field 'headOfDepartment' hai
+      select: 'firstName lastName email designation',
+      strictPopulate: false, // 👈 Crash hone se bachata hai
+    })
     .sort({ name: 1 });
 
-  return res.status(200).json(
-    new ApiResponse(200, departments, 'Departments retrieved successfully.')
-  );
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, departments, 'Departments retrieved successfully.')
+    );
 });
 
 /**
@@ -30,34 +37,49 @@ export const getDepartments = asyncHandler(async (req, res) => {
  */
 export const createDepartment = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user?.companyId;
-  const { name, description, headEmployeeId } = req.body;
+
+  if (!companyId) {
+    throw new ApiError(400, 'Company context is missing from request.');
+  }
+
+  const { name, code, headEmployeeId, headOfDepartment } = req.body;
 
   if (!name || !name.trim()) {
     throw new ApiError(400, 'Department name is required.');
   }
 
+  // Model me code required hai: user ka diya code lein ya name ke first 3 characters use karein
+  const deptCode = (code || name.slice(0, 3)).trim().toUpperCase();
+
+  // Check karein ke is company me duplicate name ya code na ho
   const existingDept = await Department.findOne({
     companyId,
-    name: name.trim(),
+    $or: [{ name: name.trim() }, { code: deptCode }],
   });
 
   if (existingDept) {
-    throw new ApiError(409, `Department with name '${name}' already exists in this company.`);
+    throw new ApiError(
+      409,
+      `Department with this name ('${name.trim()}') or code ('${deptCode}') already exists in this company.`
+    );
   }
+
+  // Head resolution (model me field name 'headOfDepartment' hai)
+  const resolvedHeadId = headOfDepartment || headEmployeeId || null;
 
   const department = await Department.create({
     companyId,
     name: name.trim(),
-    description: description || '',
-    headEmployeeId: headEmployeeId || null,
+    code: deptCode, // ✅ Ab code pass ho raha hai
+    headOfDepartment:
+      resolvedHeadId && resolvedHeadId !== '' ? resolvedHeadId : null, // ✅ Model ke mutabiq field name
     isActive: true,
   });
 
-  return res.status(201).json(
-    new ApiResponse(201, department, 'Department created successfully.')
-  );
+  return res
+    .status(201)
+    .json(new ApiResponse(201, department, 'Department created successfully.'));
 });
-
 /**
  * 3. Update Department (Company Admin only)
  */
@@ -80,13 +102,14 @@ export const updateDepartment = asyncHandler(async (req, res) => {
   }
 
   if (description !== undefined) department.description = description;
-  if (headEmployeeId !== undefined) department.headEmployeeId = headEmployeeId || null;
+  if (headEmployeeId !== undefined)
+    department.headEmployeeId = headEmployeeId || null;
 
   await department.save();
 
-  return res.status(200).json(
-    new ApiResponse(200, department, 'Department updated successfully.')
-  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, department, 'Department updated successfully.'));
 });
 
 /**
@@ -104,9 +127,15 @@ export const deactivateDepartment = asyncHandler(async (req, res) => {
   department.isActive = false;
   await department.save();
 
-  return res.status(200).json(
-    new ApiResponse(200, department, 'Department deactivated successfully. Historical employee links preserved.')
-  );
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        department,
+        'Department deactivated successfully. Historical employee links preserved.'
+      )
+    );
 });
 
 /**
@@ -155,7 +184,13 @@ export const reassignEmployeeDepartment = asyncHandler(async (req, res) => {
     .populate('departmentId', 'name description')
     .populate('userId', 'name email role');
 
-  return res.status(200).json(
-    new ApiResponse(200, updatedEmployee, 'Employee department reassigned successfully.')
-  );
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        updatedEmployee,
+        'Employee department reassigned successfully.'
+      )
+    );
 });

@@ -1,315 +1,478 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { DataTable, Button, Input, Card } from '@repo/ui';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
 
 export default function TenantManagement() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [companies, setCompanies] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
 
-  // Wizard state
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [step, setStep] = useState(1);
+  // State Management
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Modal State
+  const [showProvisionModal, setShowProvisionModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [successNotice, setSuccessNotice] = useState('');
+
+  // Form matching image fields exactly
   const [formData, setFormData] = useState({
-    name: '',
-    industry: '',
-    adminName: '',
+    legalName: '',
+    slug: '',
+    baseCurrency: 'USD',
+    defaultTimezone: 'America/New_York',
+    adminFullName: '',
     adminEmail: '',
-    adminPassword: '',
-    plan: 'Enterprise',
-    maxUsers: 100,
+    subscriptionTier: 'BUSINESS',
   });
 
-  // Action Modals state
-  const [statusModal, setStatusModal] = useState({ open: false, company: null });
-  const [impersonateModal, setImpersonateModal] = useState({ open: false, company: null, reason: '' });
+  // Check if routed from PlatformTelemetry with auto-open intent
+  useEffect(() => {
+    if (location.state?.openOnboardModal) {
+      setShowProvisionModal(true);
+    }
+  }, [location.state]);
 
-  const fetchTenants = async () => {
-    setLoading(true);
+  // Auto-generate tenant slug from legal name
+  const handleNameChange = (e) => {
+    const name = e.target.value;
+    const derivedSlug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+
+    setFormData((prev) => ({
+      ...prev,
+      legalName: name,
+      slug: derivedSlug,
+    }));
+  };
+
+  // 1. Fetch live tenants strictly from backend
+  const fetchTenants = useCallback(async () => {
     try {
-      const res = await apiClient.get('/super-admin/tenants').catch(() => null);
-      if (res?.data?.data?.tenants) {
-        setCompanies(res.data.data.tenants);
-      } else {
-        setCompanies([
-          { id: '1', name: 'CloudLogic Inc', employeeCount: 1420, plan: 'Enterprise', status: 'ACTIVE', onboardedDate: '2025-11-14' },
-          { id: '2', name: 'Apex Technologies', employeeCount: 840, plan: 'Professional', status: 'ACTIVE', onboardedDate: '2026-01-20' },
-          { id: '3', name: 'Quantum Health', employeeCount: 210, plan: 'Starter', status: 'TRIAL', onboardedDate: '2026-02-18' },
-          { id: '4', name: 'Nexus Logistics', employeeCount: 52, plan: 'Starter', status: 'DEACTIVATED', onboardedDate: '2025-08-04' },
-        ]);
-      }
+      setLoading(true);
+      const res = await apiClient.get('/super-admin/companies', {
+        params: { page: 1, limit: 100, search },
+      });
+
+      const payload = res.data?.data || res.data || [];
+      const list = Array.isArray(payload)
+        ? payload
+        : payload.companies || payload.docs || [];
+
+      setTenants(list);
+    } catch (err) {
+      console.error('Failed to fetch tenants:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [search]);
 
   useEffect(() => {
     fetchTenants();
-    if (searchParams.get('action') === 'onboard') {
-      setWizardOpen(true);
-    }
-  }, [searchParams]);
+  }, [fetchTenants]);
 
-  const handleWizardSubmit = async () => {
+  // 2. Submit Provisioning Form
+  const handleProvisionTenant = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setSuccessNotice('');
+    setSubmitting(true);
+
     try {
-      await apiClient.post('/super-admin/tenants', formData).catch(() => null);
-      setWizardOpen(false);
-      setStep(1);
-      setSearchParams({});
+      // Backend payload structure matching standard model
+      const payload = {
+        name: formData.legalName.trim(),
+        slug: formData.slug.trim(),
+        currency: formData.baseCurrency,
+        timezone: formData.defaultTimezone,
+        adminName: formData.adminFullName.trim(),
+        adminEmail: formData.adminEmail.trim().toLowerCase(),
+        plan: formData.subscriptionTier,
+        tier: formData.subscriptionTier,
+      };
+
+      await apiClient.post('/super-admin/companies', payload);
+
+      setSuccessNotice(`Tenant "${formData.legalName}" provisioned successfully!`);
+      setShowProvisionModal(false);
+      setFormData({
+        legalName: '',
+        slug: '',
+        baseCurrency: 'USD',
+        defaultTimezone: 'America/New_York',
+        adminFullName: '',
+        adminEmail: '',
+        subscriptionTier: 'BUSINESS',
+      });
       fetchTenants();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleToggleStatus = async () => {
-    const { company } = statusModal;
-    const newStatus = company.status === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE';
-    try {
-      await apiClient.patch(`/super-admin/tenants/${company.id}/status`, { status: newStatus }).catch(() => null);
-      setCompanies((prev) =>
-        prev.map((c) => (c.id === company.id ? { ...c, status: newStatus } : c))
+    } catch (err) {
+      console.error('Provisioning Error:', err);
+      setFormError(
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to provision tenant organization. Verify admin email uniqueness.'
       );
-      setStatusModal({ open: false, company: null });
-    } catch (e) {
-      console.error(e);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleImpersonate = () => {
-    if (!impersonateModal.reason.trim()) return;
-    sessionStorage.setItem('impersonation_active', `${impersonateModal.company.name} (${impersonateModal.reason})`);
-    window.location.reload();
+  // 3. Toggle Status (Active / Suspended)
+  const handleToggleStatus = async (tenantId, currentStatus) => {
+    try {
+      const nextStatus = !currentStatus;
+      await apiClient.patch(`/super-admin/companies/${tenantId}/status`, {
+        isActive: nextStatus,
+        status: nextStatus ? 'ACTIVE' : 'SUSPENDED',
+      });
+
+      setTenants((prev) =>
+        prev.map((t) =>
+          t._id === tenantId ? { ...t, isActive: nextStatus, status: nextStatus ? 'ACTIVE' : 'SUSPENDED' } : t
+        )
+      );
+    } catch (err) {
+      console.error('Failed to change tenant status:', err);
+      alert('Failed to update tenant status.');
+    }
   };
 
-  const columns = [
-    { key: 'name', label: 'Company Name', type: 'text' },
-    { key: 'employeeCount', label: 'Workforce', type: 'mono' },
-    { key: 'plan', label: 'Assigned Plan', type: 'text' },
-    { key: 'status', label: 'Status', type: 'badge' },
-    { key: 'onboardedDate', label: 'Onboarded', type: 'mono' },
-    {
-      key: 'actions',
-      label: 'Management',
-      align: 'right',
-      render: (_, row) => (
-        <div className="flex items-center justify-end gap-3 font-mono text-xs">
-          <button
-            onClick={() => setStatusModal({ open: true, company: row })}
-            className={`cursor-pointer ${row.status === 'ACTIVE' ? 'text-[#B3432E] hover:underline' : 'text-[#2E7D5B] hover:underline'}`}
-          >
-            {row.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-          </button>
-          <span className="text-[#D8D3C7]">|</span>
-          <button
-            onClick={() => setImpersonateModal({ open: true, company: row, reason: '' })}
-            className="text-[#B9812E] hover:underline cursor-pointer"
-          >
-            Impersonate
-          </button>
-        </div>
-      ),
-    },
-  ];
+  // Filter list
+  const filteredTenants = tenants.filter((t) => {
+    const matchesSearch =
+      (t.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (t.slug || '').toLowerCase().includes(search.toLowerCase()) ||
+      (t.contactEmail || t.adminEmail || '').toLowerCase().includes(search.toLowerCase());
 
-  const badgeMap = {
-    ACTIVE: 'green',
-    TRIAL: 'amber',
-    DEACTIVATED: 'red',
-  };
+    const isTenantActive = t.isActive ?? t.status === 'ACTIVE';
+    if (statusFilter === 'ACTIVE') return matchesSearch && isTenantActive;
+    if (statusFilter === 'SUSPENDED') return matchesSearch && !isTenantActive;
+    return matchesSearch;
+  });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between border-b border-[#D8D3C7] pb-4">
-        <div>
-          <h1 className="text-xl font-bold font-mono text-[#16233B]">Tenant Management</h1>
-          <p className="text-xs font-mono text-[#5B6B79] mt-0.5">Directory and onboarding portal</p>
+    <div className="space-y-5 max-w-[1380px] mx-auto select-none font-sans text-[#16233B]">
+      {/* Top Banner Notice */}
+      {successNotice && (
+        <div className="p-3.5 bg-[#EBF7F0] border border-[#C6EAD3] text-[#1E7E34] text-xs font-mono rounded flex justify-between items-center animate-fade-in">
+          <span>✓ {successNotice}</span>
+          <button onClick={() => setSuccessNotice('')} className="cursor-pointer text-sm">✕</button>
         </div>
-        <Button variant="primary" onClick={() => setWizardOpen(true)}>
-          + Onboard New Company
-        </Button>
+      )}
+
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-[24px] font-bold tracking-tight text-[#16233B]">
+            Tenant Management
+          </h1>
+          <p className="text-xs text-[#5B6B79] mt-0.5">
+            Provision isolated tenant enclaves, configure platform subscriptions, and enforce lifecycle controls.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setFormError('');
+            setShowProvisionModal(true);
+          }}
+          className="inline-flex items-center gap-2 bg-[#B9812E] hover:bg-[#a57227] text-white text-xs font-mono font-medium px-4 py-2.5 rounded-[4px] shadow-2xs transition-all cursor-pointer w-fit"
+        >
+          <span className="text-sm font-bold leading-none">+</span>
+          <span>Provision New Tenant</span>
+        </button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={companies}
-        badgeColorMap={badgeMap}
-        isLoading={loading}
-      />
+      {/* Filter & Controls Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3.5 rounded border border-[#D8D3C7]">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <input
+            type="text"
+            placeholder="Filter by company name, slug or admin..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="px-3.5 py-1.5 text-xs font-mono bg-[#FAF9F6] border border-[#D8D3C7] rounded w-full sm:w-80 outline-none focus:border-[#B9812E]"
+          />
+        </div>
 
-      {/* 3-Step Onboarding Modal */}
-      {wizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <Card className="w-full max-w-lg p-6 bg-white space-y-5 border border-[#D8D3C7] shadow-lg">
-            <div className="flex items-center justify-between border-b border-[#D8D3C7] pb-3">
-              <div>
-                <h3 className="text-sm font-bold font-mono text-[#16233B]">
-                  Company Onboarding Wizard ({step}/3)
-                </h3>
-                <p className="text-xs text-[#5B6B79]">
-                  {step === 1 && 'Step 1: Company Profile Details'}
-                  {step === 2 && 'Step 2: Company Admin Account'}
-                  {step === 3 && 'Step 3: Initial Plan Configuration'}
-                </p>
+        <div className="flex items-center gap-2 text-xs font-mono w-full sm:w-auto justify-end">
+          <span className="text-[#5B6B79]">STATUS:</span>
+          <button
+            onClick={() => setStatusFilter('ALL')}
+            className={`px-2.5 py-1 rounded cursor-pointer ${
+              statusFilter === 'ALL' ? 'bg-[#16233B] text-white font-bold' : 'bg-[#FAF9F6] text-[#5B6B79]'
+            }`}
+          >
+            ALL
+          </button>
+          <button
+            onClick={() => setStatusFilter('ACTIVE')}
+            className={`px-2.5 py-1 rounded cursor-pointer ${
+              statusFilter === 'ACTIVE' ? 'bg-[#2E7D5B] text-white font-bold' : 'bg-[#FAF9F6] text-[#5B6B79]'
+            }`}
+          >
+            ACTIVE
+          </button>
+          <button
+            onClick={() => setStatusFilter('SUSPENDED')}
+            className={`px-2.5 py-1 rounded cursor-pointer ${
+              statusFilter === 'SUSPENDED' ? 'bg-[#B3432E] text-white font-bold' : 'bg-[#FAF9F6] text-[#5B6B79]'
+            }`}
+          >
+            SUSPENDED
+          </button>
+        </div>
+      </div>
+
+      {/* Tenants Table */}
+      <div className="bg-white rounded border border-[#D8D3C7] overflow-hidden shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#FAF9F6] border-b border-[#D8D3C7] text-[10px] font-mono uppercase text-[#5B6B79] tracking-wider">
+                <th className="py-3 px-4">Organization Name</th>
+                <th className="py-3 px-4">Tenant Slug</th>
+                <th className="py-3 px-4">Base Currency</th>
+                <th className="py-3 px-4">Timezone</th>
+                <th className="py-3 px-4">Plan Tier</th>
+                <th className="py-3 px-4 text-right">Status / Access</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#EAE7DF] text-xs font-sans">
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="py-10 text-center font-mono text-xs text-[#5B6B79]">
+                    Hydrating platform tenant registry...
+                  </td>
+                </tr>
+              ) : filteredTenants.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-10 text-center font-mono text-xs text-[#5B6B79]">
+                    No matching tenants provisioned. Click "+ Provision New Tenant" to start.
+                  </td>
+                </tr>
+              ) : (
+                filteredTenants.map((t) => {
+                  const isActive = t.isActive ?? t.status === 'ACTIVE';
+                  return (
+                    <tr key={t._id} className="hover:bg-[#FAF9F6]/80 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-[#16233B]">{t.name}</div>
+                        <div className="text-[10px] font-mono text-[#5B6B79]">
+                          {t.contactEmail || t.adminEmail || 'admin@organization.com'}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-[#5B6B79]">
+                        /{t.slug || 'tenant'}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-[#16233B]">
+                        {t.currency || 'USD'}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-[#5B6B79]">
+                        {t.timezone || 'America/New_York'}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="px-2 py-0.5 rounded bg-[#FAF6EC] border border-[#E9DFBA] text-[#B9812E] font-mono text-[10px] font-bold uppercase">
+                          {t.plan || t.tier || 'Business'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isActive}
+                            onChange={() => handleToggleStatus(t._id, isActive)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-8 h-4 bg-[#D8D3C7] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#D8D3C7] after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#2E7D5B]"></div>
+                        </label>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: PROVISION NEW TENANT ORGANIZATION (EXACT MATCH TO ATTACHED IMAGE)  */}
+      {/* ========================================================================= */}
+      {showProvisionModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-lg border border-[#D8D3C7] shadow-2xl w-full max-w-[560px] overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 px-6 border-b border-[#EAE7DF] bg-[#FAF9F6] flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <span className="text-base">🏢</span>
+                <h2 className="text-base font-bold text-[#16233B]">
+                  Provision New Tenant Organization
+                </h2>
               </div>
               <button
-                onClick={() => setWizardOpen(false)}
-                className="text-[#5B6B79] hover:text-[#16233B]"
+                onClick={() => setShowProvisionModal(false)}
+                className="text-sm text-[#5B6B79] hover:text-[#16233B] cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            {step === 1 && (
-              <div className="space-y-4">
-                <Input
-                  label="Legal Company Name"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Nexus Innovations Ltd"
-                />
-                <Input
-                  label="Industry Vertical"
-                  required
-                  value={formData.industry}
-                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                  placeholder="e.g. Logistics, Fintech"
-                />
-              </div>
-            )}
+            {/* Modal Body / Form */}
+            <form onSubmit={handleProvisionTenant} className="p-6 space-y-5 text-xs">
+              {formError && (
+                <div className="p-3 bg-[#B3432E]/10 border border-[#B3432E]/30 text-[#B3432E] rounded font-mono text-[11px]">
+                  ⚠️ {formError}
+                </div>
+              )}
 
-            {step === 2 && (
-              <div className="space-y-4">
-                <Input
-                  label="Primary Admin Name"
-                  required
-                  value={formData.adminName}
-                  onChange={(e) => setFormData({ ...formData, adminName: e.target.value })}
-                  placeholder="e.g. Eleanor Vance"
-                />
-                <Input
-                  label="Work Email"
-                  type="email"
-                  required
-                  value={formData.adminEmail}
-                  onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
-                  placeholder="admin@nexus.io"
-                />
-                <Input
-                  label="Initial Password"
-                  type="password"
-                  required
-                  value={formData.adminPassword}
-                  onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
-                  placeholder="••••••••"
-                />
-              </div>
-            )}
+              {/* Row 1: Legal Name & Tenant Slug */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                    LEGAL COMPANY NAME
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Tech Nova Corp"
+                    value={formData.legalName}
+                    onChange={handleNameChange}
+                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs text-[#16233B] outline-none focus:border-[#B9812E]"
+                  />
+                </div>
 
-            {step === 3 && (
-              <div className="space-y-4 text-xs font-sans">
-                <label className="block text-xs font-medium text-[#16233B]">Selected Tier</label>
-                <select
-                  value={formData.plan}
-                  onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
-                  className="w-full p-2 border border-[#D8D3C7] rounded text-xs bg-white text-[#16233B] focus:border-[#B9812E]"
-                >
-                  <option value="Starter">Starter Plan</option>
-                  <option value="Professional">Professional Plan</option>
-                  <option value="Enterprise">Enterprise Tier</option>
-                </select>
-
-                <div className="p-3 bg-[#F6F5F1] rounded border border-[#D8D3C7] space-y-1 font-mono text-[11px]">
-                  <p><strong>Company:</strong> {formData.name || 'Not set'}</p>
-                  <p><strong>Admin:</strong> {formData.adminEmail || 'Not set'}</p>
-                  <p><strong>Tier:</strong> {formData.plan}</p>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                      TENANT SLUG
+                    </label>
+                    <span className="text-[9px] font-mono text-[#9E9B93]">auto-derived</span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 text-[#9E9B93] text-xs">🔗</span>
+                    <input
+                      type="text"
+                      required
+                      value={formData.slug}
+                      onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                      className="w-full pl-8 pr-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded font-mono text-xs text-[#5B6B79] outline-none focus:border-[#B9812E]"
+                    />
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div className="flex justify-between pt-3 border-t border-[#D8D3C7]">
-              <Button
-                variant="secondary"
-                disabled={step === 1}
-                onClick={() => setStep((s) => s - 1)}
-              >
-                Back
-              </Button>
-              {step < 3 ? (
-                <Button variant="primary" onClick={() => setStep((s) => s + 1)}>
-                  Next Step
-                </Button>
-              ) : (
-                <Button variant="primary" onClick={handleWizardSubmit}>
-                  Confirm & Provision
-                </Button>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
+              {/* Row 2: Base Currency & Default Timezone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                    BASE CURRENCY
+                  </label>
+                  <select
+                    value={formData.baseCurrency}
+                    onChange={(e) => setFormData({ ...formData, baseCurrency: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-mono text-[#16233B] outline-none cursor-pointer"
+                  >
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="PKR">PKR - Pakistani Rupee</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="AED">AED - UAE Dirham</option>
+                  </select>
+                </div>
 
-      {/* Confirmation Modal for Status Toggle */}
-      {statusModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <Card className="w-full max-w-sm p-6 bg-white space-y-4 border border-[#D8D3C7]">
-            <h3 className="text-sm font-bold font-mono text-[#16233B]">
-              Confirm Tenant {statusModal.company?.status === 'ACTIVE' ? 'Deactivation' : 'Activation'}
-            </h3>
-            <p className="text-xs text-[#5B6B79]">
-              Are you sure you want to change the status of <strong>{statusModal.company?.name}</strong>?
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setStatusModal({ open: false, company: null })}>
-                Cancel
-              </Button>
-              <Button
-                variant={statusModal.company?.status === 'ACTIVE' ? 'danger' : 'primary'}
-                onClick={handleToggleStatus}
-              >
-                Confirm
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                    DEFAULT TIMEZONE
+                  </label>
+                  <select
+                    value={formData.defaultTimezone}
+                    onChange={(e) => setFormData({ ...formData, defaultTimezone: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-mono text-[#16233B] outline-none cursor-pointer"
+                  >
+                    <option value="America/New_York">America/New_York</option>
+                    <option value="Asia/Karachi">Asia/Karachi (PKT)</option>
+                    <option value="Europe/London">Europe/London</option>
+                    <option value="Asia/Dubai">Asia/Dubai</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </div>
+              </div>
 
-      {/* Mandatory Reason Modal for Impersonation */}
-      {impersonateModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <Card className="w-full max-w-md p-6 bg-white space-y-4 border border-[#D8D3C7]">
-            <div>
-              <h3 className="text-sm font-bold font-mono text-[#16233B]">
-                Tenant Impersonation Protocol
-              </h3>
-              <p className="text-xs text-[#5B6B79] mt-1">
-                You are initiating an impersonation session for <strong>{impersonateModal.company?.name}</strong>. A mandatory reason is required for the immutable audit log.
-              </p>
-            </div>
+              {/* Row 3: Admin Full Name & Admin Email Address */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                    ADMIN FULL NAME
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Jane Doe"
+                    value={formData.adminFullName}
+                    onChange={(e) => setFormData({ ...formData, adminFullName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs text-[#16233B] outline-none focus:border-[#B9812E]"
+                  />
+                </div>
 
-            <Input
-              label="Audit Justification Reason"
-              required
-              placeholder="e.g. Investigating Ticket #8921 payroll discrepancy"
-              value={impersonateModal.reason}
-              onChange={(e) => setImpersonateModal({ ...impersonateModal, reason: e.target.value })}
-            />
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                    ADMIN EMAIL ADDRESS
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin@technova.com"
+                    value={formData.adminEmail}
+                    onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-mono text-[#16233B] outline-none focus:border-[#B9812E]"
+                  />
+                </div>
+              </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setImpersonateModal({ open: false, company: null, reason: '' })}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                disabled={!impersonateModal.reason.trim()}
-                onClick={handleImpersonate}
-              >
-                Begin Session
-              </Button>
-            </div>
-          </Card>
+              {/* Row 4: Subscription Tier */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                  SUBSCRIPTION TIER
+                </label>
+                <select
+                  value={formData.subscriptionTier}
+                  onChange={(e) => setFormData({ ...formData, subscriptionTier: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-mono text-[#16233B] outline-none cursor-pointer"
+                >
+                  <option value="STARTER">Starter (15 Seats)</option>
+                  <option value="BUSINESS">Business (50 Seats)</option>
+                  <option value="ENTERPRISE">Custom Enterprise (Unlimited)</option>
+                </select>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-[#EAE7DF]">
+                <button
+                  type="button"
+                  onClick={() => setShowProvisionModal(false)}
+                  className="px-4 py-2 bg-white border border-[#D8D3C7] text-xs font-mono text-[#5B6B79] rounded hover:bg-[#FAF9F6] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-[#B9812E] hover:bg-[#a57227] text-white rounded text-xs font-mono font-semibold flex items-center gap-2 cursor-pointer shadow-xs transition-all disabled:opacity-60"
+                >
+                  <span>{submitting ? 'Provisioning...' : 'Provision Company'}</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -30,6 +30,18 @@ const companySchema = new mongoose.Schema(
       default: 'Asia/Karachi',
     },
 
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'SUSPENDED', 'PENDING'],
+      default: 'ACTIVE'
+    },
+
     // Company Worksite / Geofence Settings
     worksiteLocation: {
       latitude: {
@@ -156,6 +168,7 @@ const companySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    strict: true,
   }
 );
 

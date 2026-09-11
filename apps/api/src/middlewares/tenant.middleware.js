@@ -3,9 +3,10 @@ import redis from '../db/redis.js';
 import { Company } from '../models/company.model.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { systemConfig } from '../services/systemConfig.service.js';
 
 /**
- * Tenant Resolution Middleware with Redis Caching Layer
+ * Tenant Resolution Middleware with Centralized Maintenance Gate & Redis Caching
  */
 export const tenantMiddleware = asyncHandler(async (req, res, next) => {
   // Pass unauthenticated or public routes
@@ -13,7 +14,16 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
     return next();
   }
 
-  // Resolve target company ID from user context or Super-Admin impersonation header
+  // 1. GLOBAL MAINTENANCE MODE GUARD (Super Admin always bypasses)
+  if (req.user.role !== 'SUPER_ADMIN') {
+    const maintenance = await systemConfig.isMaintenanceActive();
+
+    if (maintenance.enabled) {
+      throw new ApiError(503, maintenance.notice);
+    }
+  }
+
+  // 2. Resolve target company ID from user context or Super-Admin impersonation header
   const resolvedCompanyId =
     req.headers['x-impersonated-company-id'] || req.user.companyId;
 
@@ -28,7 +38,7 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
 
   const cacheKey = `tenant:${resolvedCompanyId}`;
 
-  // 1. Redis Cache Lookup
+  // 3. Redis Cache Lookup for Tenant Data
   try {
     const cachedTenant = await redis.get(cacheKey);
 
@@ -40,21 +50,21 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
       return next();
     }
   } catch (redisErr) {
-    console.error('Redis cache read failed, falling back to DB:', redisErr.message);
+    console.error('[TenantMiddleware] Redis cache read failed, falling back to DB:', redisErr.message);
   }
 
-  // 2. Fallback to Database on Cache Miss
+  // 4. Fallback to Database on Cache Miss
   const company = await Company.findById(resolvedCompanyId).lean();
 
   if (!company) {
     throw new ApiError(404, 'Invalid or deactivated company context.');
   }
 
-  // 3. Write to Redis Cache with 1-Hour TTL (3600 seconds)
+  // 5. Write to Redis Cache with 1-Hour TTL (3600 seconds)
   try {
     await redis.set(cacheKey, JSON.stringify(company), 'EX', 3600);
   } catch (redisErr) {
-    console.error('Redis cache write failed:', redisErr.message);
+    console.error('[TenantMiddleware] Redis cache write failed:', redisErr.message);
   }
 
   req.tenant = company;

@@ -5,6 +5,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import mongoose from 'mongoose';
+import crypto from 'node:crypto';
 
 
 /**
@@ -28,16 +29,29 @@ export const createEmployee = asyncHandler(async (req, res) => {
     emergencyContact,
     employeeId,
     department,
+    departmentId,
     designation,
     managerId,
     dateOfJoining,
     employmentStatus,
-    password, // Optional: custom password
+    password,
   } = req.body;
 
+  // ✅ 1. Resolve Department safely (dono me se jo bhi frontend bhej de)
+  const resolvedDeptId = department || departmentId;
+
   // Validation
-  if (!firstName || !lastName || !email || !cnic || !employeeId || !department || !designation || !dateOfJoining) {
-    throw new ApiError(400, 'All required fields must be provided.');
+  if (
+    !firstName ||
+    !lastName ||
+    !email ||
+    !cnic ||
+    !employeeId ||
+    !resolvedDeptId ||
+    !designation ||
+    !dateOfJoining
+  ) {
+    throw new ApiError(400, 'All required fields (including Department) must be provided.');
   }
 
   // Check unique constraints in Employee Collection
@@ -64,10 +78,11 @@ export const createEmployee = asyncHandler(async (req, res) => {
     }
   }
 
-  // 1. Generate default/temporary password
-  const tempPassword = password || crypto.randomBytes(6).toString('hex') + 'A1!';
+  // Generate safe temporary password
+  const tempPassword =
+    password || crypto.randomBytes(4).toString('hex') + 'A1!';
 
-  // 2. Create Auth User Account for Employee
+  // ✅ 2. Create Auth User Account for Employee
   const newUser = await User.create({
     firstName,
     lastName,
@@ -78,24 +93,32 @@ export const createEmployee = asyncHandler(async (req, res) => {
     isEmailVerified: true,
   });
 
-  // 3. Create Employee Profile Record linked with userId
-  const newEmployee = await Employee.create({
-    companyId,
-    userId: newUser._id,
-    firstName,
-    lastName,
-    email: email.toLowerCase(),
-    cnic,
-    phone,
-    address,
-    emergencyContact,
-    employeeId,
-    department,
-    designation,
-    managerId: managerId || null,
-    dateOfJoining,
-    employmentStatus: employmentStatus || 'PROBATION',
-  });
+  // ✅ 3. Create Employee Profile Record (with Rollback Protection)
+  let newEmployee;
+  try {
+    newEmployee = await Employee.create({
+      companyId,
+      userId: newUser._id,
+      firstName,
+      lastName,
+      email: email.toLowerCase(),
+      cnic,
+      phone: phone || '',
+      address: address || '',
+      emergencyContact: emergencyContact || '',
+      employeeId,
+      department: resolvedDeptId,    // 👈 Fixed!
+      departmentId: resolvedDeptId,  // 👈 Fixed!
+      designation,
+      managerId: managerId || null,
+      dateOfJoining,
+      employmentStatus: employmentStatus || 'PROBATION',
+    });
+  } catch (err) {
+    // Agar employee create hone mein koi masla aaye toh user bhi delete kar do taake data corrupt na ho
+    await User.findByIdAndDelete(newUser._id);
+    throw err;
+  }
 
   return res.status(201).json(
     new ApiResponse(
@@ -106,7 +129,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
           userId: newUser._id,
           email: newUser.email,
           role: newUser.role,
-          tempPassword, // Copy this for instant employee login!
+          tempPassword,
         },
       },
       'Employee profile and login account created successfully.'
@@ -119,10 +142,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
  * @route   GET /api/v1/employees
  */
 export const getEmployees = asyncHandler(async (req, res) => {
-
-  // Permission / role based scoped filter
   const scopedFilter = await buildScopedFilter(req);
-
   const companyId = req.companyId || req.user?.companyId;
 
   const { department, status, search, page = 1, limit = 20 } = req.query;
@@ -132,23 +152,52 @@ export const getEmployees = asyncHandler(async (req, res) => {
     companyId,
   };
 
-  if (department) query.department = department;
+  // ✅ ROBUST DEPARTMENT FILTER (Handles both ObjectId and String stored in DB)
+  if (department && department.trim() !== '' && department !== 'ALL') {
+    const trimmedDept = department.trim();
+    const isObjectId = mongoose.Types.ObjectId.isValid(trimmedDept);
 
-  if (status) query.employmentStatus = status;
+    const conditions = [{ department: trimmedDept }];
+    if (isObjectId) {
+      conditions.push({ department: new mongoose.Types.ObjectId(trimmedDept) });
+      conditions.push({ departmentId: new mongoose.Types.ObjectId(trimmedDept) });
+      conditions.push({ departmentId: trimmedDept });
+    }
 
-  if (search) {
+    // $or se match karega chahay DB mein string ho ya ObjectId
+    query.$and = query.$and || [];
+    query.$and.push({ $or: conditions });
+  }
+
+  // ✅ Status Filter
+  if (status && status !== 'ALL' && status.trim() !== '') {
+    query.employmentStatus = status.toUpperCase();
+  }
+
+  // ✅ Search Filter
+  if (search && search.trim() !== '') {
+    const s = search.trim();
     query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { lastName: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { employeeId: { $regex: search, $options: 'i' } },
+      { firstName: { $regex: s, $options: 'i' } },
+      { lastName: { $regex: s, $options: 'i' } },
+      { email: { $regex: s, $options: 'i' } },
+      { employeeId: { $regex: s, $options: 'i' } },
     ];
   }
 
   const employees = await Employee.find(query)
-    .populate('managerId', 'firstName lastName email designation employeeId')
+    .populate({
+      path: 'department',
+      select: 'name code',
+      strictPopulate: false,
+    })
+    .populate({
+      path: 'managerId',
+      select: 'firstName lastName email designation employeeId',
+      strictPopulate: false,
+    })
     .sort({ createdAt: -1 })
-    .skip((page - 1) * limit)
+    .skip((Number(page) - 1) * Number(limit))
     .limit(Number(limit));
 
   const total = await Employee.countDocuments(query);
@@ -166,6 +215,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
     )
   );
 });
+
 /**
  * @desc    Get Single Employee Profile & Direct Reports Hierarchy
  * @route   GET /api/v1/employees/:id

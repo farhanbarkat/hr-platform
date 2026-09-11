@@ -6,25 +6,47 @@ import {
   flagMissingCheckouts,
 } from '../controllers/attendance.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { requireRole } from '../middlewares/rbac.middleware.js';
+import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
+import { requireEntitlement } from '../middlewares/entitlement.middleware.js';
 
 const router = Router();
 
-router.use(verifyJWT);
+// Global verification pipeline
+router.use(verifyJWT, tenantMiddleware);
 router.use(enforceReadOnlyImpersonation);
 
-// Employee & HR check-in/out endpoints
-router.post('/check-in', checkIn);
-router.post('/check-out', checkOut);
+// 1. Check-in & Check-out:
+// Har authenticated employee/user ke liye open (Basic Self-Service Permission)
+// Plus Subscription Matrix check: 'mod_attendance_gps'
+router.post(
+  '/check-in',
+  requirePermission('attendance:checkin'),
+  requireEntitlement('mod_attendance_gps'),
+  checkIn
+);
 
-// Query records (Employee sees own, Admin/HR sees all)
-router.get('/', getAttendanceRecords);
+router.post(
+  '/check-out',
+  requirePermission('attendance:checkout'),
+  requireEntitlement('mod_attendance_gps'),
+  checkOut
+);
 
-// Admin-only: Review and flag missing checkouts
+// 2. Query Attendance Records:
+// Kisi ko bhi view attendance ki permission de sakti hai company
+router.get(
+  '/',
+  requirePermission('attendance:view'),
+  getAttendanceRecords
+);
+
+// 3. Administrative / Managerial Action:
+// Company chahe toh yeh authority HR ko de, Branch Manager ko de, ya kisi specific Supervisor ko de!
 router.post(
   '/flag-missing-checkouts',
-  requireRole('COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'),
+  requirePermission('attendance:manage_missing'),
   flagMissingCheckouts
 );
 

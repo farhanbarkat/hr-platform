@@ -1,62 +1,139 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { Card, Button } from '@repo/ui';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuth, resolveHomeRoute } from '../context/AuthContext.jsx';
+import { tokenStorage } from '../lib/tokenStorage.js';
 
-export const ProtectedRoute = ({ children, requiredPermission, requiredPermissions = [] }) => {
-  const { isAuthenticated, isLoading, hasPermission, hasAnyPermission, logout } = useAuth();
+/**
+ * Enterprise Route Guard
+ * Supports:
+ * - requiredPermission: 'payroll.read'
+ * - requiredPermissions: ['payroll.read', 'payroll.run'] (any match)
+ * - allowedRoles / requiredRole: ['COMPANY_ADMIN', 'HR']
+ */
+export const ProtectedRoute = ({
+  children,
+  requiredRole,
+  allowedRoles,
+  requiredPermission,
+  requiredPermissions,
+}) => {
   const location = useLocation();
+  const {
+    user: contextUser,
+    token: contextToken,
+    loading,
+    hasRole,
+    hasPermission,
+    hasAnyPermission,
+    isSuperAdmin,
+  } = useAuth();
 
-  if (isLoading) {
+  // 1. Loading State (Hydration ke waqt block nahi karega)
+  if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F5F1] flex items-center justify-center">
-        <div className="font-mono text-sm text-[#5B6B79] animate-pulse">
-          Validating Session...
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F6F2] font-mono text-xs text-[#1D2530] space-y-2 select-none">
+        <div className="w-8 h-8 rounded-full border-2 border-[#8C5D17] border-t-transparent animate-spin" />
+        <span className="text-[#8C5D17] font-semibold">Authenticating Enclave Session...</span>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
+  // 2. Token & User Verification
+  const token = contextToken || tokenStorage.getAccessToken();
+  let user = contextUser || tokenStorage.getUser();
+
+  if (typeof user === 'string') {
+    try {
+      user = JSON.parse(user);
+    } catch {
+      user = null;
+    }
+  }
+
+  // Unauthenticated -> Login par bhejein with return state
+  if (!token || !user) {
+    console.warn('[Guard] Blocked: No active token or user profile found.');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check single permission string
+  // 3. Super Admin Bypass (Super Admin har route aur permission par authorized hai)
+  if (isSuperAdmin || String(user.role || '').toUpperCase() === 'SUPER_ADMIN') {
+    return children ? children : <Outlet />;
+  }
+
+  // 4. Role-Based Verification
+  const targetRoles = [];
+  if (Array.isArray(allowedRoles)) {
+    targetRoles.push(...allowedRoles.map((r) => String(r).trim().toUpperCase()));
+  }
+  if (requiredRole) {
+    targetRoles.push(String(requiredRole).trim().toUpperCase());
+  }
+
+  if (targetRoles.length > 0 && !hasRole(targetRoles)) {
+    console.warn(
+      `[Guard] Blocked: Role mismatch. Required: [${targetRoles.join(', ')}], Current: ${user.role}`
+    );
+    const home = resolveHomeRoute(user);
+    if (location.pathname === home) return children ? children : <Outlet />;
+    return <Navigate to={home} replace />;
+  }
+
+  // 5. Granular Single Permission Verification ('resource.action')
   if (requiredPermission && !hasPermission(requiredPermission)) {
-    return <AccessDeniedScreen missingPermission={requiredPermission} onLogout={logout} />;
+    console.warn(`[Guard] Blocked: Missing mandatory permission "${requiredPermission}"`);
+    const home = resolveHomeRoute(user);
+    if (location.pathname === home) return children ? children : <Outlet />;
+    return <Navigate to={home} replace />;
   }
 
-  // Check any permission in list
-  if (requiredPermissions.length > 0 && !hasAnyPermission(requiredPermissions)) {
-    return <AccessDeniedScreen missingPermission={requiredPermissions.join(', ')} onLogout={logout} />;
+  // 6. Multiple Permissions Verification (At least one required)
+  if (Array.isArray(requiredPermissions) && requiredPermissions.length > 0) {
+    if (!hasAnyPermission(requiredPermissions)) {
+      console.warn(`[Guard] Blocked: Missing all matching permissions in:`, requiredPermissions);
+      const home = resolveHomeRoute(user);
+      if (location.pathname === home) return children ? children : <Outlet />;
+      return <Navigate to={home} replace />;
+    }
   }
 
-  return children;
+  return children ? children : <Outlet />;
 };
 
-const AccessDeniedScreen = ({ missingPermission, onLogout }) => (
-  <div className="min-h-screen bg-[#F6F5F1] flex items-center justify-center p-4">
-    <Card className="max-w-md w-full text-center space-y-4 border-l-[4px] border-l-[#B3432E]">
-      <div className="h-12 w-12 rounded-full bg-[#B3432E]/10 text-[#B3432E] flex items-center justify-center mx-auto text-xl font-bold font-mono">
-        403
-      </div>
-      <div>
-        <h2 className="text-xl font-semibold text-[#16233B]">Access Restricted</h2>
-        <p className="text-sm text-[#5B6B79] mt-1">
-          Your account does not possess the requisite clearance:
-        </p>
-        <code className="block mt-2 px-2.5 py-1.5 bg-[#F6F5F1] border border-[#D8D3C7] rounded text-xs font-mono text-[#B3432E]">
-          {missingPermission}
-        </code>
-      </div>
-      <div className="pt-2 flex justify-center gap-3">
-        <Button variant="secondary" onClick={() => window.history.back()}>
-          Return Back
-        </Button>
-        <Button variant="destructive" onClick={onLogout}>
-          Sign Out
-        </Button>
-      </div>
-    </Card>
-  </div>
-);
+/**
+ * UI Element Permission Gate Component
+ * Screen ke andar buttons / actions ko permission ke mutabiq hide karne ke liye
+ * Example: <Can permission="payroll.run"><button>Execute Batch</button></Can>
+ */
+export const Can = ({
+  permission,
+  permissions,
+  role,
+  roles,
+  children,
+  fallback = null,
+}) => {
+  const { hasPermission, hasAnyPermission, hasRole, isSuperAdmin } = useAuth();
+
+  if (isSuperAdmin) return <>{children}</>;
+
+  if (permission && !hasPermission(permission)) {
+    return fallback;
+  }
+
+  if (Array.isArray(permissions) && permissions.length > 0 && !hasAnyPermission(permissions)) {
+    return fallback;
+  }
+
+  if (role && !hasRole(role)) {
+    return fallback;
+  }
+
+  if (Array.isArray(roles) && roles.length > 0 && !hasRole(roles)) {
+    return fallback;
+  }
+
+  return <>{children}</>;
+};
+
+export default ProtectedRoute;

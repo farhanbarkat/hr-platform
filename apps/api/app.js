@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './src/config/swagger.js';
 
 import { enforceReadOnlyImpersonation } from './src/middlewares/readOnly.middleware.js';
 import { errorHandler } from './src/middlewares/error.middleware.js';
@@ -45,12 +47,54 @@ import chatRouter from './src/routes/chat.routes.js';
 
 const app = express();
 
-// Global Middlewares
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Blocked by CORS policy'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-tenant-id'],
+};
+
+// 1. CORS MIDDLEWARE SABSE PEHLE HONA CHAHIYE:
+app.use(cors(corsOptions));
+app.options(/(.*)/, cors(corsOptions));
+
+// 2. AB ROUTES LIKHEIN (Ab in sab par CORS headers lagenge):
+app.get('/api/v1/health', (req, res) => {
+  res.status(200).json({
+    status: 'OPERATIONAL',
+    nodeRegion: process.env.AWS_REGION || 'local',
+    tlsStandard: 'TLS 1.3 / AES-256-GCM',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.use(express.json({ limit: '16kb' }));
 app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 app.use(express.static('public'));
 app.use(cookieParser());
+
+// Swagger UI Endpoint (Dev & Staging)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  
+  // Raw JSON spec (useful for frontend code-gen tools)
+  app.get('/api-docs.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+}
 
 // Auth & Super Admin routes
 app.use('/api/v1/auth', authRouter);
