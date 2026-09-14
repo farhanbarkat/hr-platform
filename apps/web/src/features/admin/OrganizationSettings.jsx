@@ -9,14 +9,15 @@ export default function OrganizationSettings() {
   const [actionError, setActionError] = useState('');
 
   // -------------------------------------------------------------
-  // TAB 1: LETTERHEAD TEMPLATES STATE
+  // TAB 1: WORD-STYLE DOCUMENT EDITOR STATE
   // -------------------------------------------------------------
   const [templates, setTemplates] = useState([]);
   const [selectedType, setSelectedType] = useState('offerLetter');
   const [activeTemplate, setActiveTemplate] = useState(null);
-  const [bodyContent, setBodyContent] = useState('');
   const [templateTitle, setTemplateTitle] = useState('');
-  const textareaRef = useRef(null);
+  
+  // Word Canvas Ref
+  const editorRef = useRef(null);
 
   // -------------------------------------------------------------
   // TAB 2: TAX SLABS STATE
@@ -29,7 +30,7 @@ export default function OrganizationSettings() {
   const [simulating, setSimulating] = useState(false);
 
   // -------------------------------------------------------------
-  // TAB 3: OPERATING PARAMETERS & ATTENDANCE STATE
+  // TAB 3: OPERATING PARAMETERS
   // -------------------------------------------------------------
   const [operatingParams, setOperatingParams] = useState({
     standardWorkingHours: 8.0,
@@ -40,7 +41,7 @@ export default function OrganizationSettings() {
   });
 
   // -------------------------------------------------------------
-  // TAB 4: BROADCAST ANNOUNCEMENTS STATE
+  // TAB 4: ANNOUNCEMENTS
   // -------------------------------------------------------------
   const [announcements, setAnnouncements] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -63,8 +64,10 @@ export default function OrganizationSettings() {
       if (current) {
         setActiveTemplate(current);
         setSelectedType(current.templateType);
-        setBodyContent(current.bodyContent || '');
         setTemplateTitle(current.title || '');
+        if (editorRef.current) {
+          editorRef.current.innerHTML = current.bodyContent || '';
+        }
       }
     } catch (err) {
       console.error('Failed to load letter templates:', err);
@@ -72,6 +75,13 @@ export default function OrganizationSettings() {
       setLoading(false);
     }
   }, [selectedType]);
+
+  // Sync editor content whenever active template changes
+  useEffect(() => {
+    if (editorRef.current && activeTemplate) {
+      editorRef.current.innerHTML = activeTemplate.bodyContent || '';
+    }
+  }, [activeTemplate]);
 
   // 2. Load Tax Slabs
   const loadTaxSlabs = useCallback(async () => {
@@ -99,7 +109,7 @@ export default function OrganizationSettings() {
     }
   }, [countryCode]);
 
-  // 3. Load Operating Parameters (Company Settings)
+  // 3. Load Operating Parameters
   const loadOperatingParams = useCallback(async () => {
     try {
       const res = await apiClient.get('/finance/settings/thresholds').catch(() => null);
@@ -115,7 +125,7 @@ export default function OrganizationSettings() {
     }
   }, []);
 
-  // 4. Load Broadcast Announcements & Departments
+  // 4. Load Announcements
   const loadAnnouncements = useCallback(async () => {
     try {
       setLoading(true);
@@ -149,42 +159,68 @@ export default function OrganizationSettings() {
     if (activeTab === 'announcements') loadAnnouncements();
   }, [activeTab, loadTemplates, loadTaxSlabs, loadOperatingParams, loadAnnouncements]);
 
-  // Template Handlers
+  // -------------------------------------------------------------
+  // WORD-STYLE RICH TEXT COMMAND DISPATCHER
+  // -------------------------------------------------------------
+  const executeCommand = (command, value = null) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    document.execCommand(command, false, value);
+  };
+
+  const handleInsertVariable = (tag) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    const tagHtml = `<span contenteditable="false" style="background-color: #FAF4E8; color: #8C5D17; border: 1px solid #E3DED4; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; font-weight: 600; display: inline-block; margin: 0 2px;">{{${tag}}}</span>&nbsp;`;
+    document.execCommand('insertHTML', false, tagHtml);
+  };
+
+  const handleInsertTable = () => {
+    const tableHtml = `
+      <table style="width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px;">
+        <thead>
+          <tr style="background-color: #FAF8F5; border-bottom: 2px solid #D8D3C7;">
+            <th style="border: 1px solid #E3DED4; padding: 8px; text-align: left;">Item / Description</th>
+            <th style="border: 1px solid #E3DED4; padding: 8px; text-align: right;">Details / Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #E3DED4; padding: 8px;">Base Compensation</td>
+            <td style="border: 1px solid #E3DED4; padding: 8px; text-align: right;">{{basicSalary}}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #E3DED4; padding: 8px;">Effective Appointment</td>
+            <td style="border: 1px solid #E3DED4; padding: 8px; text-align: right;">{{effectiveDate}}</td>
+          </tr>
+        </tbody>
+      </table><p><br></p>
+    `;
+    executeCommand('insertHTML', tableHtml);
+  };
+
   const handleSelectTemplateType = (typeKey) => {
     setSelectedType(typeKey);
     const found = templates.find((t) => t.templateType === typeKey);
     if (found) {
       setActiveTemplate(found);
-      setBodyContent(found.bodyContent || '');
       setTemplateTitle(found.title || '');
+      if (editorRef.current) {
+        editorRef.current.innerHTML = found.bodyContent || '';
+      }
     }
-  };
-
-  const handleInsertTag = (tag) => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      setBodyContent((prev) => prev + ` {{${tag}}}`);
-      return;
-    }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const tagToInsert = `{{${tag}}}`;
-    const updatedContent = bodyContent.substring(0, start) + tagToInsert + bodyContent.substring(end);
-    setBodyContent(updatedContent);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + tagToInsert.length, start + tagToInsert.length);
-    }, 0);
   };
 
   const handleSaveTemplate = async () => {
     try {
       setActionLoading(true);
+      const finalHtml = editorRef.current ? editorRef.current.innerHTML : '';
+      
       await apiClient.put(`/letter-templates/${selectedType}`, {
         title: templateTitle || activeTemplate?.title || selectedType,
-        bodyContent: bodyContent,
+        bodyContent: finalHtml,
       });
-      setActionStatus('Template saved successfully.');
+      setActionStatus('Template document saved successfully.');
       loadTemplates();
     } catch (err) {
       setActionError(err.response?.data?.message || 'Failed to save template.');
@@ -199,8 +235,8 @@ export default function OrganizationSettings() {
       setActionLoading(true);
       const res = await apiClient.delete(`/letter-templates/${selectedType}`);
       const def = res.data?.data;
-      if (def) {
-        setBodyContent(def.bodyContent || '');
+      if (def && editorRef.current) {
+        editorRef.current.innerHTML = def.bodyContent || '';
         setTemplateTitle(def.title || '');
       }
       setActionStatus('Template reset to system default.');
@@ -295,7 +331,6 @@ export default function OrganizationSettings() {
       setActionLoading(true);
       setActionStatus('');
       setActionError('');
-      // Save currency threshold and attendance grace period
       await apiClient.put('/finance/settings/thresholds', {
         currency: 'PKR',
       });
@@ -349,7 +384,6 @@ export default function OrganizationSettings() {
       await apiClient.patch(`/announcements/${id}/archive`);
       loadAnnouncements();
     } catch (err) {
-      // Fallback archive attempt if route is delete/deactivate
       try {
         await apiClient.delete(`/announcements/${id}`);
         loadAnnouncements();
@@ -382,19 +416,18 @@ export default function OrganizationSettings() {
 
   return (
     <div className="space-y-4 max-w-[1440px] mx-auto select-none font-sans text-[#1D2530] pb-20">
-      {/* Top Banner with Sub-Header */}
+      
+      {/* Top Banner Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 px-6 rounded-lg border border-[#E3DED4] shadow-xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-[#8C5D17] tracking-wider uppercase font-semibold">
-              TICKET-022B1 & TICKET-031 // Multi-Tenant Policy Engine
-            </span>
-          </div>
+          <span className="text-[10px] font-mono text-[#8C5D17] tracking-wider uppercase font-semibold">
+            ORGANIZATION ARCHITECTURE // TENANT POLICY & DOCUMENTS
+          </span>
           <h1 className="text-lg font-bold text-[#111C2E] mt-0.5">
             Organization Policies & Document Configuration
           </h1>
           <p className="text-[11px] text-[#69788A]">
-            Configure tenant-wide operating hours, dynamic PDF letter templates, statutory tax rules, and broadcast announcements.
+            Design word-processed dynamic PDF letterheads, statutory tax slabs, working hours, and broadcast updates.
           </p>
         </div>
 
@@ -421,12 +454,12 @@ export default function OrganizationSettings() {
             className="px-4 py-1.5 bg-[#8C5D17] hover:bg-[#784F14] text-white rounded font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all disabled:opacity-50"
           >
             <span>💾</span>
-            <span>Save All Policy Adjustments</span>
+            <span>Save All Policies</span>
           </button>
         </div>
       </div>
 
-      {/* Global Alerts */}
+      {/* Global Status Alerts */}
       {actionError && (
         <div className="p-3 bg-[#FDEEEB] border border-[#F5C2BA] text-[#B83E28] rounded font-mono text-xs">
           ⚠️ {actionError}
@@ -449,7 +482,7 @@ export default function OrganizationSettings() {
           }`}
         >
           <span>📄</span>
-          <span>Letterhead & Document Templates</span>
+          <span>Microsoft Word-Style Letter Designer</span>
         </button>
 
         <button
@@ -490,11 +523,13 @@ export default function OrganizationSettings() {
       </div>
 
       {/* ============================================================= */}
-      {/* TAB 1: LETTERHEAD & DOCUMENT TEMPLATES                        */}
+      {/* TAB 1: MICROSOFT WORD-STYLE LETTER TEMPLATES DESIGNER         */}
       {/* ============================================================= */}
       {activeTab === 'templates' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          <div className="lg:col-span-4 bg-white rounded-lg border border-[#E3DED4] p-4 space-y-4 shadow-xs">
+          
+          {/* Left Categories Menu */}
+          <div className="lg:col-span-3 bg-white rounded-lg border border-[#E3DED4] p-4 space-y-4 shadow-xs">
             <div className="text-[10px] font-mono uppercase tracking-wider text-[#728294] font-bold px-1">
               DOCUMENT CATEGORIES
             </div>
@@ -509,12 +544,12 @@ export default function OrganizationSettings() {
                       isSelected ? 'bg-[#111C2E] text-white font-medium shadow-xs' : 'hover:bg-[#FAF8F5] text-[#111C2E]'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs">✉</span>
-                      <span>{item.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span>📄</span>
+                      <span className="truncate">{item.label}</span>
                     </div>
                     <span
-                      className={`text-[9px] font-mono px-1.5 py-0.2 rounded uppercase border ${
+                      className={`text-[8.5px] font-mono px-1.5 py-0.2 rounded uppercase border ${
                         isSelected
                           ? 'bg-[#8C5D17] text-white border-[#8C5D17]'
                           : item.status === 'ACTIVE'
@@ -529,103 +564,284 @@ export default function OrganizationSettings() {
               })}
             </div>
 
-            <div className="p-3.5 bg-[#FAF8F5] border border-[#E3DED4] rounded space-y-1 text-xs">
-              <div className="flex items-center gap-1.5 font-bold text-[#111C2E] text-[11px]">
-                <span>ℹ</span>
-                <span>Variable Substitution</span>
-              </div>
-              <p className="text-[11px] text-[#546274] leading-relaxed">
-                Click any variable chip above the editor to instantly inject merge fields into your document layout at cursor position.
+            {/* Variable Tags List */}
+            <div className="pt-2 border-t border-[#E3DED4] space-y-2">
+              <span className="text-[10px] font-mono font-bold uppercase text-[#728294] block">
+                INSERT MERGE VARIABLES
+              </span>
+              <p className="text-[10.5px] text-[#546274] leading-tight">
+                Click any tag to inject dynamic employee data directly into your document canvas:
               </p>
-            </div>
-          </div>
-
-          <div className="lg:col-span-8 bg-white rounded-lg border border-[#E3DED4] p-5 space-y-4 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F4F1EA] pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-[#111C2E]">
-                    {categoryMenu.find((c) => c.key === selectedType)?.label || selectedType} Template
-                  </h2>
-                  <span className="px-2 py-0.5 rounded text-[9.5px] font-mono bg-[#EBF7EE] text-[#1E7E34] border border-[#C8E6C9] font-bold">
-                    {activeTemplate?.isCustomized ? 'Tenant Custom Active' : 'System Default Active'}
-                  </span>
-                </div>
-                <div className="text-[10px] font-mono text-[#728294] mt-0.5">
-                  Last modified on Oct 14, 2026 by Alex Vance (Super Admin)
-                </div>
-              </div>
-
-              <button
-                onClick={handleResetTemplate}
-                disabled={actionLoading}
-                className="text-xs font-mono text-[#728294] hover:text-[#B83E28] flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <span>↺</span>
-                <span>Reset to Default</span>
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-[9.5px] font-mono font-bold uppercase text-[#728294] tracking-wider">
-                AVAILABLE DYNAMIC TAGS (CLICK TO INSERT)
-              </div>
-              <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
+              <div className="flex flex-wrap gap-1">
                 {allowedTags.map((tag) => (
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => handleInsertTag(tag)}
-                    className="px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-[#111C2E] cursor-pointer transition-all active:scale-95"
+                    onClick={() => handleInsertVariable(tag)}
+                    className="px-2 py-1 bg-[#FAF4E8] hover:bg-[#F2EFE9] border border-[#E3DED4] rounded text-[#8C5D17] font-mono text-[10px] font-semibold cursor-pointer transition-all active:scale-95"
                   >
-                    {`{{${tag}}}`}
+                    +{tag}
                   </button>
                 ))}
               </div>
             </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-[10px] font-mono text-[#728294]">
-                <span className="uppercase font-bold tracking-wider">DOCUMENT MARKDOWN / RICH LAYOUT</span>
-                <span>UTF-8 Encoded</span>
-              </div>
-              <textarea
-                ref={textareaRef}
-                rows="12"
-                value={bodyContent}
-                onChange={(e) => setBodyContent(e.target.value)}
-                className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded p-3 text-xs font-mono text-[#111C2E] leading-relaxed outline-none focus:border-[#8C5D17] transition-all resize-y"
-                placeholder="Write your document layout template..."
-              />
-            </div>
-
-            <div className="p-2.5 bg-[#EBF7EE] border border-[#C8E6C9] rounded flex items-center justify-between text-[11px] font-mono text-[#1E7E34]">
-              <div className="flex items-center gap-1.5 font-semibold">
-                <span>✓</span>
-                <span>ALL VARIABLE PLACEHOLDERS VALID AND RECOGNIZED BY DOCUMENT COMPILER ENGINE</span>
-              </div>
-              <span className="text-[10px] text-[#325239]">0 Syntax Warnings</span>
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F4F1EA]">
-              <button
-                onClick={handlePreviewPdf}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-white hover:bg-[#FAF8F5] border border-[#D5CEC2] rounded text-xs font-mono font-medium text-[#111C2E] flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
-              >
-                <span>👁</span>
-                <span>Preview Rendered PDF</span>
-              </button>
-              <button
-                onClick={handleSaveTemplate}
-                disabled={actionLoading}
-                className="px-5 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white rounded text-xs font-mono font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all disabled:opacity-50"
-              >
-                <span>💾</span>
-                <span>Save Template</span>
-              </button>
-            </div>
           </div>
+
+          {/* Right Word Document Studio */}
+          <div className="lg:col-span-9 bg-[#EFECE6] p-4 md:p-6 rounded-lg border border-[#D5CEC2] shadow-inner space-y-3">
+            
+            {/* Microsoft Word Top Ribbon Controls */}
+            <div className="bg-white border border-[#D5CEC2] rounded-lg p-2.5 shadow-xs space-y-2">
+              
+              {/* Top Row: Font Family, Size, Style & Alignment */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs select-none">
+                
+                {/* Font Selector */}
+                <select
+                  onChange={(e) => executeCommand('fontName', e.target.value)}
+                  className="px-2 py-1 bg-[#FAF8F5] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer outline-none font-sans"
+                >
+                  <option value="Calibri">Calibri (Body)</option>
+                  <option value="Arial">Arial</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Courier New">Courier New (Mono)</option>
+                </select>
+
+                {/* Font Size */}
+                <select
+                  onChange={(e) => executeCommand('fontSize', e.target.value)}
+                  className="px-2 py-1 bg-[#FAF8F5] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer outline-none"
+                >
+                  <option value="3">11 pt (Normal)</option>
+                  <option value="2">9 pt (Small)</option>
+                  <option value="4">14 pt (Subheading)</option>
+                  <option value="5">18 pt (Heading)</option>
+                  <option value="6">24 pt (Title)</option>
+                </select>
+
+                <span className="w-px h-5 bg-[#D5CEC2] mx-1"></span>
+
+                {/* Bold, Italic, Underline, Strikethrough */}
+                <button
+                  type="button"
+                  title="Bold"
+                  onClick={() => executeCommand('bold')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded font-bold text-sm text-[#111C2E] cursor-pointer"
+                >
+                  B
+                </button>
+                <button
+                  type="button"
+                  title="Italic"
+                  onClick={() => executeCommand('italic')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded italic font-serif text-sm text-[#111C2E] cursor-pointer"
+                >
+                  I
+                </button>
+                <button
+                  type="button"
+                  title="Underline"
+                  onClick={() => executeCommand('underline')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded underline text-sm text-[#111C2E] cursor-pointer"
+                >
+                  U
+                </button>
+                <button
+                  type="button"
+                  title="Strikethrough"
+                  onClick={() => executeCommand('strikeThrough')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded line-through text-sm text-[#111C2E] cursor-pointer"
+                >
+                  S
+                </button>
+
+                <span className="w-px h-5 bg-[#D5CEC2] mx-1"></span>
+
+                {/* Alignment */}
+                <button
+                  type="button"
+                  title="Align Left"
+                  onClick={() => executeCommand('justifyLeft')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  ⫷
+                </button>
+                <button
+                  type="button"
+                  title="Align Center"
+                  onClick={() => executeCommand('justifyCenter')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  ≡
+                </button>
+                <button
+                  type="button"
+                  title="Align Right"
+                  onClick={() => executeCommand('justifyRight')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  ⫸
+                </button>
+                <button
+                  type="button"
+                  title="Justify"
+                  onClick={() => executeCommand('justifyFull')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  ☰
+                </button>
+
+                <span className="w-px h-5 bg-[#D5CEC2] mx-1"></span>
+
+                {/* Lists & Indent */}
+                <button
+                  type="button"
+                  title="Bulleted List"
+                  onClick={() => executeCommand('insertUnorderedList')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  •≡
+                </button>
+                <button
+                  type="button"
+                  title="Numbered List"
+                  onClick={() => executeCommand('insertOrderedList')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  1≡
+                </button>
+                <button
+                  type="button"
+                  title="Indent"
+                  onClick={() => executeCommand('indent')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  ⇥
+                </button>
+                <button
+                  type="button"
+                  title="Outdent"
+                  onClick={() => executeCommand('outdent')}
+                  className="w-7 h-7 flex items-center justify-center bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-xs text-[#111C2E] cursor-pointer"
+                >
+                  ⇤
+                </button>
+
+                <span className="w-px h-5 bg-[#D5CEC2] mx-1"></span>
+
+                {/* Colors: Text & Highlight */}
+                <div className="flex items-center gap-1" title="Font Color">
+                  <span className="text-[10px] font-bold text-[#111C2E]">A</span>
+                  <input
+                    type="color"
+                    defaultValue="#111C2E"
+                    onChange={(e) => executeCommand('foreColor', e.target.value)}
+                    className="w-6 h-6 border-0 bg-transparent cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1" title="Highlight Marker">
+                  <span className="text-[10px] font-bold text-[#8C5D17]">🖌</span>
+                  <input
+                    type="color"
+                    defaultValue="#FFF9C4"
+                    onChange={(e) => executeCommand('hiliteColor', e.target.value)}
+                    className="w-6 h-6 border-0 bg-transparent cursor-pointer"
+                  />
+                </div>
+
+                <span className="w-px h-5 bg-[#D5CEC2] mx-1"></span>
+
+                {/* Insert Components */}
+                <button
+                  type="button"
+                  onClick={handleInsertTable}
+                  className="px-2 py-1 bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-[10.5px] font-medium text-[#111C2E] cursor-pointer flex items-center gap-1"
+                >
+                  <span>▦</span>
+                  <span>Table</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => executeCommand('insertHorizontalRule')}
+                  className="px-2 py-1 bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-[10.5px] font-medium text-[#111C2E] cursor-pointer"
+                >
+                  ― Line
+                </button>
+              </div>
+
+            </div>
+
+            {/* Simulated Microsoft Word A4 Page Sheet */}
+            <div className="max-w-[850px] mx-auto bg-white min-h-[650px] rounded shadow-md border border-[#D8D3C7] p-8 md:p-12 transition-all">
+              
+              {/* Formal Letterhead Top Header */}
+              <div className="border-b-2 border-[#111C2E] pb-3 mb-6 flex justify-between items-end">
+                <div>
+                  <h2 className="text-xl font-serif font-bold text-[#111C2E] tracking-tight">
+                    {activeTemplate?.title || selectedType.toUpperCase()}
+                  </h2>
+                  <span className="text-[10px] font-mono text-[#728294] uppercase tracking-wider">
+                    Official Corporate Correspondence Enclave
+                  </span>
+                </div>
+                <div className="text-right text-[10px] font-mono text-[#728294]">
+                  <div>Date: {new Date().toLocaleDateString()}</div>
+                  <div className="text-[#8C5D17] font-semibold">Ref: CL-DOC-{selectedType.toUpperCase().slice(0, 4)}</div>
+                </div>
+              </div>
+
+              {/* The Actual Word Canvas */}
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="outline-none min-h-[450px] text-sm text-[#111C2E] font-sans leading-relaxed select-text space-y-3"
+                style={{ wordBreak: 'break-word' }}
+              />
+
+              {/* Formal Letterhead Bottom Footer */}
+              <div className="border-t border-[#E3DED4] pt-4 mt-8 flex justify-between items-center text-[10px] font-mono text-[#728294]">
+                <span>Generated via Cloudlogic Enterprise Platform</span>
+                <span>Page 1 of 1</span>
+              </div>
+            </div>
+
+            {/* Bottom Actions Bar */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                onClick={handleResetTemplate}
+                disabled={actionLoading}
+                className="text-xs font-mono text-[#728294] hover:text-[#B83E28] cursor-pointer"
+              >
+                ↺ Reset to System Default Layout
+              </button>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handlePreviewPdf}
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-white hover:bg-[#FAF8F5] border border-[#D5CEC2] rounded text-xs font-mono font-medium text-[#111C2E] flex items-center gap-1.5 cursor-pointer shadow-xs transition-all disabled:opacity-50"
+                >
+                  <span>👁</span>
+                  <span>Preview Rendered PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTemplate}
+                  disabled={actionLoading}
+                  className="px-5 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white rounded text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all disabled:opacity-50"
+                >
+                  <span>💾</span>
+                  <span>Save Document</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
         </div>
       )}
 
@@ -652,7 +868,7 @@ export default function OrganizationSettings() {
                   Pakistan FBR Salary Tax Slabs (Fiscal Year {taxYear})
                 </h2>
                 <p className="text-[11px] text-[#8C9BAE] max-w-2xl leading-relaxed">
-                  Brackets can be adjusted below. Calculations apply progressive slab methodology automatically during monthly payroll executions.
+                  Brackets apply progressive slab methodology automatically during monthly payroll executions.
                 </p>
               </div>
             </div>
@@ -808,7 +1024,7 @@ export default function OrganizationSettings() {
               <h3 className="text-sm font-bold text-[#111C2E]">Progressive Tax Test Calculator Simulator</h3>
             </div>
             <p className="text-[11px] text-[#69788A]">
-              Enter sample monthly salary to instantly compute exact monthly tax withholding against active brackets above.
+              Enter sample monthly salary to compute exact monthly tax withholding against active brackets above.
             </p>
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pt-1">
               <div className="flex flex-col sm:flex-row sm:items-center gap-6">
@@ -852,11 +1068,10 @@ export default function OrganizationSettings() {
       )}
 
       {/* ============================================================= */}
-      {/* TAB 3: WORKING HOURS & GRACE PERIODS                          */}
+      {/* TAB 3: WORKING HOURS & GRACE PERIODS                         */}
       {/* ============================================================= */}
       {activeTab === 'hours' && (
         <div className="bg-white rounded-lg border border-[#E3DED4] p-6 space-y-6 shadow-xs">
-          {/* Header Title */}
           <div className="space-y-1 border-b border-[#F4F1EA] pb-3">
             <div className="flex items-center gap-2 text-sm font-bold text-[#111C2E]">
               <span className="w-5 h-5 rounded-full bg-[#FAF3E8] border border-[#E8D4B5] text-[#8C5D17] flex items-center justify-center text-xs">
@@ -869,7 +1084,6 @@ export default function OrganizationSettings() {
             </p>
           </div>
 
-          {/* Row 1: Working Hours & Grace Period */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
@@ -885,9 +1099,6 @@ export default function OrganizationSettings() {
                 />
                 <span className="text-xs font-mono text-[#728294] whitespace-nowrap">Hours / Day</span>
               </div>
-              <p className="text-[10.5px] font-mono text-[#8C9BAE]">
-                Base multiplier for overtime and daily timesheet calculations.
-              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -903,13 +1114,9 @@ export default function OrganizationSettings() {
                 />
                 <span className="text-xs font-mono text-[#728294] whitespace-nowrap">Minutes</span>
               </div>
-              <p className="text-[10.5px] font-mono text-[#8C9BAE]">
-                Late deduction triggers automatically after this threshold expires.
-              </p>
             </div>
           </div>
 
-          {/* Row 2: Default Currency & Default Timezone */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
@@ -924,9 +1131,6 @@ export default function OrganizationSettings() {
                   Locked Core Preset
                 </span>
               </div>
-              <p className="text-[10.5px] font-mono text-[#8C9BAE]">
-                Base currency used across all payroll ledgers and expense reports.
-              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -942,13 +1146,9 @@ export default function OrganizationSettings() {
                   System Standard
                 </span>
               </div>
-              <p className="text-[10.5px] font-mono text-[#8C9BAE]">
-                Timezone reference for attendance check-ins and automated shift logs.
-              </p>
             </div>
           </div>
 
-          {/* Row 3: Unpaid Leave Negative Balance Override */}
           <div className="p-4 bg-[#FAF8F5] border border-[#E3DED4] rounded-lg flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded bg-white border border-[#D5CEC2] flex items-center justify-center text-sm text-[#8C5D17]">
@@ -964,7 +1164,6 @@ export default function OrganizationSettings() {
               </div>
             </div>
 
-            {/* Toggle Switch */}
             <button
               type="button"
               onClick={() => setOperatingParams({
@@ -983,7 +1182,6 @@ export default function OrganizationSettings() {
             </button>
           </div>
 
-          {/* Action Save Button */}
           <div className="flex justify-end pt-2">
             <button
               type="button"
@@ -1003,7 +1201,6 @@ export default function OrganizationSettings() {
       {/* ============================================================= */}
       {activeTab === 'announcements' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Left Form: Post New Broadcast Announcement */}
           <div className="lg:col-span-6 bg-white rounded-lg border border-[#E3DED4] p-5 space-y-4 shadow-xs">
             <div className="flex items-center gap-2 border-b border-[#F4F1EA] pb-3">
               <span className="text-[#8C5D17] text-base">📢</span>
@@ -1073,7 +1270,6 @@ export default function OrganizationSettings() {
                 />
               </div>
 
-              {/* Note callout */}
               <div className="p-3 bg-[#FAF8F5] border border-[#EAE6DD] rounded flex items-start gap-2 text-[10.5px] text-[#69788A]">
                 <span className="text-[#8C5D17] mt-0.5">ⓘ</span>
                 <span>
@@ -1094,7 +1290,6 @@ export default function OrganizationSettings() {
             </form>
           </div>
 
-          {/* Right Feed: Active Broadcast Feed */}
           <div className="lg:col-span-6 space-y-3">
             <div className="flex items-center justify-between px-1">
               <h2 className="text-xs font-bold text-[#111C2E] font-mono">Active Broadcast Feed</h2>

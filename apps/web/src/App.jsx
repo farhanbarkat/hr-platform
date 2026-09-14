@@ -28,10 +28,17 @@ import PayrollCompensation from './features/admin/PayrollCompensation.jsx';
 import CompanyFinance from './features/admin/CompanyFinance.jsx';
 import OrganizationSettings from './features/admin/OrganizationSettings.jsx';
 import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
+import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
+import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
 
-// Public Route Guard (Already authenticated users ko unke landing page par redirect karta hai)
+// Public Route Guard
 function PublicOnlyRoute({ children }) {
-  const { user, isAuthenticated, loading, resolveHomeRoute: getHome } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    loading,
+    resolveHomeRoute: getHome,
+  } = useAuth();
 
   if (loading) {
     return (
@@ -42,7 +49,9 @@ function PublicOnlyRoute({ children }) {
   }
 
   if (isAuthenticated && user) {
-    return <Navigate to={getHome ? getHome() : resolveHomeRoute(user)} replace />;
+    return (
+      <Navigate to={getHome ? getHome() : resolveHomeRoute(user)} replace />
+    );
   }
 
   return children;
@@ -61,7 +70,12 @@ function CompanyAdminShell() {
 }
 
 export default function App() {
-  const { user, isAuthenticated, loading, resolveHomeRoute: getHome } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    loading,
+    resolveHomeRoute: getHome,
+  } = useAuth();
 
   if (loading) {
     return (
@@ -85,6 +99,16 @@ export default function App() {
 
       <Route path="/dev/components" element={<ComponentShowcase />} />
 
+      {/* ESS Dashboard */}
+      <Route
+        path="/employee/dashboard"
+        element={
+          <ProtectedRoute>
+            <EmployeeDashboard />
+          </ProtectedRoute>
+        }
+      />
+
       {/* 2. Super Admin Protected Routes */}
       <Route
         path="/super-admin"
@@ -94,7 +118,10 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/super-admin/telemetry" replace />} />
+        <Route
+          index
+          element={<Navigate to="/super-admin/telemetry" replace />}
+        />
         <Route path="telemetry" element={<PlatformTelemetry />} />
         <Route path="tenants" element={<TenantManagement />} />
         <Route path="plans" element={<PlansTiers />} />
@@ -104,20 +131,46 @@ export default function App() {
         <Route path="settings" element={<SystemSettings />} />
       </Route>
 
-      {/* 3. Company Admin Protected Routes (Granular Permission Gates) */}
+      {/* 3. Company Admin Protected Routes (Dynamic SaaS Capability Gates) */}
       <Route
         path="/company-admin"
         element={
-          <ProtectedRoute allowedRoles={['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR_MANAGER', 'HR', 'MANAGER']}>
+          <ProtectedRoute
+            checkAccess={(authUser, hasAnyPerm) => {
+              const role = String(authUser.role || '').toUpperCase();
+              if (['COMPANY_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(role) || authUser.isCompanyOwner) {
+                return true;
+              }
+              return hasAnyPerm([
+                'employee.read',
+                'employee.create',
+                'leave.read',
+                'leave.view_team',
+                'leave.approve_hr',
+                'leave.approve_manager',
+                'attendance.read',
+                'attendance.view_team',
+                'payroll.read',
+                'payroll.run',
+                'company.read',
+                'company.configure',
+                'finance.view_dashboard',
+                'settings.read',
+              ]);
+            }}
+          >
             <CompanyAdminShell />
           </ProtectedRoute>
         }
       >
         {/* Default Overview Landing */}
-        <Route index element={<Navigate to="/company-admin/overview" replace />} />
+        <Route
+          index
+          element={<Navigate to="/company-admin/overview" replace />}
+        />
         <Route path="overview" element={<ExecutiveOverview />} />
 
-        {/* Workforce Directory: employee.read */}
+        {/* Workforce Directory */}
         <Route
           path="employees"
           element={
@@ -127,7 +180,7 @@ export default function App() {
           }
         />
 
-        {/* Roles & Delegation Engine: Company Admin / Super Admin Delegation */}
+        {/* Roles & Delegation */}
         <Route
           path="roles-capabilities"
           element={
@@ -140,7 +193,7 @@ export default function App() {
           }
         />
 
-        {/* Departments & Shifts: company.read */}
+        {/* Departments & Shifts */}
         <Route
           path="departments"
           element={
@@ -150,7 +203,17 @@ export default function App() {
           }
         />
 
-        {/* Attendance Tracking: attendance.read */}
+        {/* Shift Incharge Live Floor Monitoring */}
+        <Route
+          path="shift-incharge"
+          element={
+            <ProtectedRoute>
+              <ShiftInchargeDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Attendance Tracking */}
         <Route
           path="attendance"
           element={
@@ -160,19 +223,22 @@ export default function App() {
           }
         />
 
-        {/* Leave Operations: leave.view_team ya leave.read */}
+        {/* Leave Operations */}
         <Route
           path="leaves"
           element={
             <ProtectedRoute
-              requiredPermissions={[PERMISSIONS.LEAVE.VIEW_TEAM, PERMISSIONS.LEAVE.READ]}
+              requiredPermissions={[
+                PERMISSIONS.LEAVE.VIEW_TEAM,
+                PERMISSIONS.LEAVE.READ,
+              ]}
             >
               <LeaveOperations />
             </ProtectedRoute>
           }
         />
 
-        {/* Payroll & Compensation: payroll.read */}
+        {/* Payroll & Compensation */}
         <Route
           path="payroll"
           element={
@@ -182,22 +248,28 @@ export default function App() {
           }
         />
 
-        {/* Company Finance: finance.view_dashboard */}
+        {/* Company Finance */}
         <Route
           path="finance"
           element={
-            <ProtectedRoute requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}>
+            <ProtectedRoute
+              requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}
+            >
               <CompanyFinance />
             </ProtectedRoute>
           }
         />
 
-        {/* Organization Settings: settings.read ya company.configure */}
+        {/* Organization Settings */}
         <Route
           path="settings"
           element={
             <ProtectedRoute
-              requiredPermissions={[PERMISSIONS.SETTINGS.READ, PERMISSIONS.COMPANY.CONFIGURE]}
+              requiredPermissions={[
+                PERMISSIONS.SETTINGS.READ,
+                PERMISSIONS.COMPANY.CONFIGURE,
+                PERMISSIONS.SETTINGS.UPDATE,
+              ]}
             >
               <OrganizationSettings />
             </ProtectedRoute>
@@ -205,18 +277,32 @@ export default function App() {
         />
       </Route>
 
-      {/* 4. Backward Compatibility Aliases for '/admin/*' */}
+      {/* 4. Global Alias for Shift Incharge Dashboard */}
+      <Route
+        path="/shift-incharge/dashboard"
+        element={
+          <ProtectedRoute>
+            <CompanyAdminShell />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<ShiftInchargeDashboard />} />
+      </Route>
+
+      {/* 5. Backward Compatibility Aliases for '/admin/*' */}
       <Route
         path="/admin/*"
         element={
           <Navigate
-            to={user ? (getHome ? getHome() : resolveHomeRoute(user)) : '/login'}
+            to={
+              user ? (getHome ? getHome() : resolveHomeRoute(user)) : '/login'
+            }
             replace
           />
         }
       />
 
-      {/* 5. Root Entry Point */}
+      {/* 6. Root Entry Point */}
       <Route
         path="/"
         element={
@@ -231,12 +317,14 @@ export default function App() {
         }
       />
 
-      {/* 6. Catch-All */}
+      {/* 7. Catch-All Route */}
       <Route
         path="*"
         element={
           <Navigate
-            to={user ? (getHome ? getHome() : resolveHomeRoute(user)) : '/login'}
+            to={
+              user ? (getHome ? getHome() : resolveHomeRoute(user)) : '/login'
+            }
             replace
           />
         }

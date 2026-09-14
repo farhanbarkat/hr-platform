@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PERMISSIONS } from '../config/permissions.js';
 
+
 const Icons = {
   Overview: () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -19,6 +20,15 @@ const Icons = {
   Departments: () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  Incharge: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
     </svg>
   ),
   Attendance: () => (
@@ -77,13 +87,12 @@ export default function AppSidebar() {
     }
   }, [user]);
 
-  // Dynamic Operations Navigation based strictly on user capabilities
   const operationsNav = [
     {
       label: 'Executive Overview',
       path: '/company-admin/overview',
       Icon: Icons.Overview,
-      isAccessible: true, // Universal Cockpit
+      isAccessible: true,
     },
     {
       label: 'Workforce Directory',
@@ -96,6 +105,17 @@ export default function AppSidebar() {
       path: '/company-admin/departments',
       Icon: Icons.Departments,
       isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.COMPANY.READ),
+    },
+    {
+      label: 'Shift Incharge Desk',
+      path: '/shift-incharge/dashboard',
+      Icon: Icons.Incharge,
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        user?.role === 'HR' ||
+        user?.role === 'MANAGER' ||
+        hasPermission(PERMISSIONS.ATTENDANCE.VIEW_TEAM),
     },
     {
       label: 'Time & Attendance',
@@ -125,7 +145,6 @@ export default function AppSidebar() {
     },
   ];
 
-  // Platform Architecture Navigation (Finance, Delegation, Settings)
   const platformNav = [
     {
       label: 'Company Finance',
@@ -183,24 +202,26 @@ export default function AppSidebar() {
   return (
     <aside className="w-[230px] shrink-0 bg-[#0B1320] min-h-screen text-[#8C9BAE] flex flex-col justify-between border-r border-[#162235] select-none font-sans">
       <div>
-        {/* Brand Header */}
         <div className="p-3.5 pb-3 border-b border-[#162235]">
           <div className="flex items-center gap-2.5">
             <div className="w-6 h-6 rounded bg-[#18263D] text-[#C98A2C] border border-[#273B5B] flex items-center justify-center font-serif font-bold text-xs">
               {resolvedCompanyName.charAt(0).toUpperCase()}
             </div>
+
             <div className="overflow-hidden">
               <h2 className="text-[11.5px] font-bold text-white tracking-wide truncate leading-tight">
                 {resolvedCompanyName}
               </h2>
-              <span className="inline-block px-1.5 py-[0.5px] bg-[#C98A2C]/15 text-[#E5B56A] border border-[#C98A2C]/30 text-[8px] font-mono tracking-wider rounded-[2px] uppercase mt-0.5">
-                {user?.role ? String(user.role).replace('_', ' ') : 'TENANT ADMIN'}
+
+              <span className="inline-block px-1.5 py-[0.5px] bg-[#C98A2C]/15 text-[#E5B56A] border border-[#C98A2C]/30 text-[8px] font-mono tracking-wider rounded-[2px] uppercase mt-0.5 truncate max-w-[170px]">
+                {user?.jobTitle ||
+                  user?.designation ||
+                  (user?.role ? String(user.role).replace('_', ' ') : 'STAFF')}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Section 1: Operations Directory */}
         {visibleOperations.length > 0 && (
           <>
             <div className="px-3 pt-3.5 pb-1">
@@ -208,11 +229,13 @@ export default function AppSidebar() {
                 OPERATIONS DIRECTORY
               </span>
             </div>
-            <nav className="space-y-[1px] px-2">{visibleOperations.map(renderItem)}</nav>
+
+            <nav className="space-y-[1px] px-2">
+              {visibleOperations.map(renderItem)}
+            </nav>
           </>
         )}
 
-        {/* Section 2: Platform Architecture */}
         {visiblePlatform.length > 0 && (
           <>
             <div className="px-3 pt-4 pb-1">
@@ -220,27 +243,34 @@ export default function AppSidebar() {
                 PLATFORM ARCHITECTURE
               </span>
             </div>
-            <nav className="space-y-[1px] px-2">{visiblePlatform.map(renderItem)}</nav>
+
+            <nav className="space-y-[1px] px-2">
+              {visiblePlatform.map(renderItem)}
+            </nav>
           </>
         )}
       </div>
 
-      {/* Footer Profile */}
       <div className="p-3 border-t border-[#162235] bg-[#080E18] space-y-2">
         <div className="flex items-center justify-between px-0.5">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-[#18263D] border border-[#2B3E5E] flex items-center justify-center text-[10.5px] font-bold text-white">
               {user?.firstName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'A'}
             </div>
+
             <div className="overflow-hidden">
               <div className="text-[11px] font-bold text-white leading-tight truncate">
-                {user?.firstName ? `${user.firstName} ${user.lastName || ''}` : user?.email?.split('@')[0] || 'Admin'}
+                {user?.firstName
+                  ? `${user.firstName} ${user.lastName || ''}`
+                  : user?.email?.split('@')[0] || 'Admin'}
               </div>
+
               <div className="text-[9px] text-[#556982] font-mono leading-tight truncate">
                 {user?.email || 'admin@cloudlogic.com'}
               </div>
             </div>
           </div>
+
           <button
             onClick={() => {
               logout();
