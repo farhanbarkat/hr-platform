@@ -1,7 +1,7 @@
 import { apiClient } from '../lib/apiClient.js';
 import { tokenStorage } from '../lib/tokenStorage.js';
 import { getDefaultPermissionsForRole } from '../config/permissions.js';
-import { getRedirectPathByRole } from '../lib/roleRedirect.js';
+import { resolveHomeRoute } from '../context/AuthContext.jsx';
 
 export const authService = {
   login: async (email, password) => {
@@ -11,7 +11,6 @@ export const authService = {
     });
     const payload = response.data?.data || response.data || {};
 
-    // 2FA Challenge
     if (payload.requires2FA || payload.challengeToken) {
       return {
         requires2FA: true,
@@ -23,7 +22,6 @@ export const authService = {
     const accessToken = payload.accessToken || payload.token;
     let user = payload.user || payload.employee;
 
-    // Attach base permissions matrix if missing from database
     if (user && (!Array.isArray(user.permissions) || user.permissions.length === 0)) {
       user.permissions = getDefaultPermissionsForRole(user.role);
     }
@@ -35,7 +33,7 @@ export const authService = {
     return {
       requires2FA: false,
       user,
-      homeRoute: getRedirectPathByRole(user),
+      homeRoute: resolveHomeRoute(user),
     };
   },
 
@@ -65,7 +63,7 @@ export const authService = {
 
     return {
       user,
-      homeRoute: getRedirectPathByRole(user),
+      homeRoute: resolveHomeRoute(user),
     };
   },
 
@@ -92,5 +90,4 @@ export const authService = {
     }
   },
 };
-
 export default authService;

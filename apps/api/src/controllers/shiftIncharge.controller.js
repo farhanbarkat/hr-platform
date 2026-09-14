@@ -6,11 +6,14 @@ import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
+
 /**
  * Helper: Parse "HH:mm" time string into a Date object for today
  */
-const getTodayTimeDate = (timeStr, baseDate = new Date()) => {
-  const [hours, minutes] = timeStr.split(':').map(Number);
+const getTodayTimeDate = (timeStr = '09:00', baseDate = new Date()) => {
+  const parts = String(timeStr).split(':');
+  const hours = Number(parts[0]) || 0;
+  const minutes = Number(parts[1]) || 0;
   const date = new Date(baseDate);
   date.setHours(hours, minutes, 0, 0);
   return date;
@@ -21,46 +24,44 @@ const getTodayTimeDate = (timeStr, baseDate = new Date()) => {
  * GET /api/v1/shift-incharge/dashboard
  */
 export const getInchargeShiftDashboard = asyncHandler(async (req, res) => {
-  const companyId = req.companyId || req.user.companyId;
+  const companyId = req.companyId || req.user?.companyId;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const endOfToday = new Date(today);
   endOfToday.setHours(23, 59, 59, 999);
 
-  // 1. Resolve logged-in incharge employee record
-  let inchargeEmployeeId = req.query.inchargeId;
+  const role = req.user?.role?.toUpperCase();
+  const isAdminOrHr = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR', 'HR_MANAGER'].includes(role);
 
-  if (!inchargeEmployeeId) {
-    const employee = await Employee.findOne({
-      $or: [{ userId: req.user._id }, { email: req.user.email }],
-      companyId,
-    });
-
-    if (!employee && !['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR'].includes(req.user.role)) {
-      throw new ApiError(404, 'Employee record not found for logged in user.');
-    }
-
-    inchargeEmployeeId = employee?._id;
-  }
-
-  // 2. Build Query: Admin/HR can pass ?inchargeId or view all, Incharge is strictly scoped to themselves
+  // 1. Base Boundary Query for Active Assignments
   const assignmentQuery = {
     companyId,
     startDate: { $lte: endOfToday },
     $or: [{ endDate: null }, { endDate: { $gte: today } }],
   };
 
-  if (!['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR'].includes(req.user.role) || inchargeEmployeeId) {
-    if (!inchargeEmployeeId) {
-      throw new ApiError(403, 'You are not assigned as an incharge for any active shifts.');
+  // 2. Role-based scoping
+  if (isAdminOrHr) {
+    if (req.query.inchargeId && req.query.inchargeId !== 'ALL') {
+      assignmentQuery.inchargeId = req.query.inchargeId;
     }
-    assignmentQuery.inchargeId = inchargeEmployeeId;
+  } else {
+    const employee = await Employee.findOne({
+      $or: [{ userId: req.user._id }, { email: req.user.email }],
+      companyId,
+    });
+
+    if (!employee) {
+      throw new ApiError(404, 'Employee record not found for logged-in user.');
+    }
+
+    assignmentQuery.inchargeId = employee._id;
   }
 
-  // 3. Find active shift assignments monitored by this incharge
+  // 3. Find shift assignments
   const assignments = await ShiftAssignment.find(assignmentQuery)
-    .populate('shiftTemplateId', 'name startTime endTime gracePeriodOverride isOvernight')
+    .populate('shiftTemplateId', 'name startTime endTime gracePeriodOverride isNightShift')
     .populate('employeeId', 'firstName lastName email designation departmentId employeeCode avatar')
     .lean();
 
@@ -69,21 +70,23 @@ export const getInchargeShiftDashboard = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         {
-          totalAssigned: 0,
-          presentCount: 0,
-          lateCount: 0,
-          absentCount: 0,
-          onLeaveCount: 0,
+          shiftSummary: {
+            totalAssigned: 0,
+            presentCount: 0,
+            lateCount: 0,
+            absentCount: 0,
+            onLeaveCount: 0,
+          },
           roster: [],
         },
-        'No active employees found under your shift supervision for today.'
+        'No active employees found under shift supervision for today.'
       )
     );
   }
 
   const assignedEmployeeIds = assignments.map((a) => a.employeeId?._id).filter(Boolean);
 
-  // 4. Parallel lookup: Today's Attendance logs and Approved Leaves
+  // 4. Lookups for Attendance & Approved Leaves
   const [attendanceLogs, activeLeaves] = await Promise.all([
     AttendanceRecord.find({
       companyId,
@@ -100,8 +103,12 @@ export const getInchargeShiftDashboard = asyncHandler(async (req, res) => {
     }).lean(),
   ]);
 
-  const attendanceMap = new Map(attendanceLogs.map((log) => [log.employeeId.toString(), log]));
-  const leaveMap = new Map(activeLeaves.map((l) => [l.employeeId.toString(), l]));
+  const attendanceMap = new Map(
+    attendanceLogs.map((log) => [log.employeeId.toString(), log])
+  );
+  const leaveMap = new Map(
+    activeLeaves.map((l) => [l.employeeId.toString(), l])
+  );
 
   let presentCount = 0;
   let lateCount = 0;
@@ -110,7 +117,7 @@ export const getInchargeShiftDashboard = asyncHandler(async (req, res) => {
 
   const now = new Date();
 
-  // 5. Build dynamic real-time status for each rostered employee
+  // 5. Build dynamic status for each employee
   const roster = assignments.map((item) => {
     const emp = item.employeeId;
     const shift = item.shiftTemplateId;
@@ -120,45 +127,37 @@ export const getInchargeShiftDashboard = asyncHandler(async (req, res) => {
     const leaveRecord = leaveMap.get(empIdStr);
 
     let status = 'NOT_CHECKED_IN';
-    let statusColor = 'gray'; // semantic color mapping
-    let checkInTime = attendanceRecord?.checkInTime || null;
-    let checkOutTime = attendanceRecord?.checkOutTime || null;
+    let checkInTime = attendanceRecord?.clockIn || attendanceRecord?.checkInTime || null;
+    let checkOutTime = attendanceRecord?.clockOut || attendanceRecord?.checkOutTime || null;
 
     if (leaveRecord) {
       status = 'ON_LEAVE';
-      statusColor = 'purple';
       onLeaveCount++;
     } else if (attendanceRecord?.status === 'PRESENT' || checkInTime) {
-      // Calculate whether check-in was late based on shift template
-      const shiftStartTime = getTodayTimeDate(shift.startTime, today);
-      const graceMinutes = shift.gracePeriodOverride ?? 15;
+      const shiftStartTime = getTodayTimeDate(shift?.startTime || '09:00', today);
+      const graceMinutes = shift?.gracePeriodOverride ?? 15;
       const lateThreshold = new Date(shiftStartTime.getTime() + graceMinutes * 60000);
 
       const actualCheckIn = new Date(checkInTime);
 
-      if (actualCheckIn > lateThreshold || attendanceRecord?.status === 'LATE') {
+      if (actualCheckIn > lateThreshold || attendanceRecord?.status === 'LATE' || attendanceRecord?.isLate) {
         status = 'LATE';
-        statusColor = 'amber';
         lateCount++;
         presentCount++;
       } else {
         status = 'CHECKED_IN';
-        statusColor = 'emerald';
         presentCount++;
       }
     } else {
-      // Check if shift start time + grace has elapsed -> Mark visually ABSENT
-      const shiftStartTime = getTodayTimeDate(shift.startTime, today);
-      const graceMinutes = shift.gracePeriodOverride ?? 15;
+      const shiftStartTime = getTodayTimeDate(shift?.startTime || '09:00', today);
+      const graceMinutes = shift?.gracePeriodOverride ?? 15;
       const lateThreshold = new Date(shiftStartTime.getTime() + graceMinutes * 60000);
 
       if (now > lateThreshold) {
         status = 'ABSENT';
-        statusColor = 'rose';
         absentCount++;
       } else {
         status = 'EXPECTED';
-        statusColor = 'sky';
       }
     }
 
@@ -166,21 +165,20 @@ export const getInchargeShiftDashboard = asyncHandler(async (req, res) => {
       assignmentId: item._id,
       employee: {
         _id: emp?._id,
-        name: `${emp?.firstName || ''} ${emp?.lastName || ''}`.trim(),
-        employeeCode: emp?.employeeCode,
-        designation: emp?.designation,
+        name: `${emp?.firstName || ''} ${emp?.lastName || ''}`.trim() || 'Worker',
+        employeeCode: emp?.employeeCode || emp?.employeeId || 'EMP',
+        designation: emp?.designation || 'Staff',
         email: emp?.email,
       },
       shift: {
         _id: shift?._id,
-        name: shift?.name,
-        startTime: shift?.startTime,
-        endTime: shift?.endTime,
+        name: shift?.name || 'General Shift',
+        startTime: shift?.startTime || '09:00',
+        endTime: shift?.endTime || '18:00',
         gracePeriod: shift?.gracePeriodOverride ?? 15,
       },
       attendance: {
         status,
-        statusColor,
         checkInTime,
         checkOutTime,
         durationMinutes: attendanceRecord?.totalWorkMinutes || 0,

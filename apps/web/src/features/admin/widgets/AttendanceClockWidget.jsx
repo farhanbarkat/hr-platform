@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { apiClient } from '../../../lib/apiClient.js';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
 export default function AttendanceClockWidget() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
   const [isError, setIsError] = useState(false);
@@ -12,14 +14,17 @@ export default function AttendanceClockWidget() {
       setStatus(null);
       setIsError(false);
 
-      // Pass standard payload expected by attendance controllers
+      // Resolve own employee ID from AuthContext session
+      const targetEmpId = user?.employeeId || user?.employee?._id || user?._id;
+
       const payload = {
-        timestamp: new Date().toISOString(),
+        employeeId: targetEmpId, // Satisfies "employeeId is required for HR/Admin"
         source: 'WEB',
+        timestamp: new Date().toISOString(),
       };
 
       const res = await apiClient.post(`/attendance/${type}`, payload);
-      const msg = res.data?.message || `Clocked ${type === 'check-in' ? 'In' : 'Out'} successfully.`;
+      const msg = res.data?.message || `Clocked ${type === 'check-in' ? 'In' : 'Out'} recorded.`;
       setStatus(msg);
     } catch (err) {
       setIsError(true);

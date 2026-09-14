@@ -5,24 +5,59 @@ import { getDefaultPermissionsForRole, hasUserPermission } from '../config/permi
 
 export const AuthContext = createContext(null);
 
-// Dynamic Role-Based Landing Engine
+/**
+ * Pure Capability-Driven SaaS Landing Resolver
+ * Role title par nahi, user ke granted capabilities array par decide karta hai.
+ */
 export const resolveHomeRoute = (user) => {
   if (!user) return '/login';
 
   const role = String(user.role || '').trim().toUpperCase();
 
-  if (role === 'SUPER_ADMIN') {
+  // 1. Root Platform Super Admin
+  if (role === 'SUPER_ADMIN' || user.isSuperAdmin) {
     return '/super-admin/telemetry';
   }
 
-  if (['COMPANY_ADMIN', 'ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+  // 2. Tenant Owner / System Administrator
+  if (['COMPANY_ADMIN', 'ADMIN'].includes(role) || user.isCompanyOwner) {
     return '/company-admin/overview';
   }
 
-  if (['MANAGER', 'SUPERVISOR'].includes(role)) {
+  // Compile active permission strings
+  const permsList = Array.isArray(user.permissions) && user.permissions.length > 0
+    ? user.permissions
+    : getDefaultPermissionsForRole(role);
+
+  const permissionsSet = new Set(permsList);
+
+  // 3. Management / Administrative Authority
+  const managementCapabilities = [
+    'employee.read',
+    'employee.create',
+    'leave.read',
+    'leave.approve_hr',
+    'leave.approve_manager',
+    'attendance.read',
+    'payroll.read',
+    'payroll.run',
+    'company.read',
+    'company.configure',
+    'finance.view_dashboard',
+    'settings.read',
+  ];
+
+  const hasManagementPower = managementCapabilities.some((cap) => permissionsSet.has(cap));
+  if (hasManagementPower) {
     return '/company-admin/overview';
   }
 
+  // 4. Shift Incharge / Floor Lead
+  if (permissionsSet.has('attendance.view_team')) {
+    return '/shift-incharge/dashboard';
+  }
+
+  // 5. Standard Staff (ESS Portal)
   return '/employee/dashboard';
 };
 
@@ -31,7 +66,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => tokenStorage.getAccessToken());
   const [loading, setLoading] = useState(true);
 
-  // 1. Initial Session Hydration & Sync with Backend
+  // 1. Initial Session Hydration
   const hydrateSession = useCallback(async () => {
     const storedToken = tokenStorage.getAccessToken();
     if (!storedToken) {
@@ -42,17 +77,20 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      // Fetch current profile & fresh permissions array from /auth/me
       const res = await apiClient.get('/auth/me');
       const payload = res.data?.data || res.data;
       const freshUser = payload.user || payload;
 
       if (freshUser) {
+        // Guarantee permissions array exists
+        if (!Array.isArray(freshUser.permissions) || freshUser.permissions.length === 0) {
+          freshUser.permissions = getDefaultPermissionsForRole(freshUser.role);
+        }
         setUser(freshUser);
         tokenStorage.setUser(freshUser);
       }
     } catch (err) {
-      console.warn('Session hydration failed; evaluating cached profile:', err.message);
+      console.warn('Session hydration failed:', err.message);
       const cached = tokenStorage.getUser();
       if (!cached) {
         tokenStorage.clearTokens();
@@ -66,22 +104,17 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     hydrateSession();
-
-    const handleSessionExpired = () => {
-      logout();
-    };
-
+    const handleSessionExpired = () => logout();
     window.addEventListener('auth:session-expired', handleSessionExpired);
     return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
   }, [hydrateSession]);
 
- // 2. Login Flow (DO NOT set global loading=true here!)
+  // 2. Login Flow
   const login = async (email, password) => {
     try {
       const response = await apiClient.post('/auth/login', { email, password });
       const payload = response.data?.data || response.data || {};
 
-      // 2FA Challenge (First-time Enrollment ya Normal OTP)
       if (payload.requires2FA || payload.challengeToken || payload.mfaRequired) {
         return {
           requires2FA: true,
@@ -120,7 +153,7 @@ export function AuthProvider({ children }) {
       throw error;
     }
   };
-  
+
   // 3. 2FA Verification Flow
   const verify2FA = async (challengeToken, code, isEnrolled = true) => {
     setLoading(true);
@@ -159,7 +192,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // 4. Logout Flow
   const logout = () => {
     tokenStorage.clearTokens();
     setUser(null);
@@ -167,53 +199,44 @@ export function AuthProvider({ children }) {
     window.location.href = '/login';
   };
 
-  // -------------------------------------------------------------
-  // RBAC Permission Engine ('resource.action' format)
-  // -------------------------------------------------------------
   const isSuperAdmin = useMemo(() => {
     return String(user?.role || '').trim().toUpperCase() === 'SUPER_ADMIN';
   }, [user]);
 
-  /**
-   * Evaluates if authenticated user has permission string (e.g. 'payroll.read')
-   */
+  const isCompanyAdmin = useMemo(() => {
+    const r = String(user?.role || '').trim().toUpperCase();
+    return isSuperAdmin || r === 'COMPANY_ADMIN' || r === 'ADMIN' || Boolean(user?.isCompanyOwner);
+  }, [user, isSuperAdmin]);
+
   const hasPermission = useCallback(
     (requiredPermission) => {
       if (!user) return false;
+      if (isSuperAdmin || isCompanyAdmin) return true;
       return hasUserPermission(user, requiredPermission);
     },
-    [user]
+    [user, isSuperAdmin, isCompanyAdmin]
   );
 
-  /**
-   * Evaluates if user possesses AT LEAST ONE permission from the array
-   */
   const hasAnyPermission = useCallback(
     (permissions = []) => {
       if (!user) return false;
-      if (isSuperAdmin) return true;
+      if (isSuperAdmin || isCompanyAdmin) return true;
       if (!Array.isArray(permissions) || permissions.length === 0) return true;
       return permissions.some((perm) => hasPermission(perm));
     },
-    [user, isSuperAdmin, hasPermission]
+    [user, isSuperAdmin, isCompanyAdmin, hasPermission]
   );
 
-  /**
-   * Evaluates if user possesses ALL required permissions
-   */
   const hasAllPermissions = useCallback(
     (permissions = []) => {
       if (!user) return false;
-      if (isSuperAdmin) return true;
+      if (isSuperAdmin || isCompanyAdmin) return true;
       if (!Array.isArray(permissions) || permissions.length === 0) return true;
       return permissions.every((perm) => hasPermission(perm));
     },
-    [user, isSuperAdmin, hasPermission]
+    [user, isSuperAdmin, isCompanyAdmin, hasPermission]
   );
 
-  /**
-   * Case-insensitive Role Matcher
-   */
   const hasRole = useCallback(
     (roleOrRoles) => {
       if (!user) return false;
@@ -234,6 +257,7 @@ export function AuthProvider({ children }) {
       isLoading: loading,
       isAuthenticated: Boolean(token && user),
       isSuperAdmin,
+      isCompanyAdmin,
       login,
       verify2FA,
       logout,
@@ -248,6 +272,7 @@ export function AuthProvider({ children }) {
       token,
       loading,
       isSuperAdmin,
+      isCompanyAdmin,
       hasRole,
       hasPermission,
       hasAnyPermission,
