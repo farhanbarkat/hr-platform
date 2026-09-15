@@ -14,30 +14,37 @@ import { validateGeofence } from '../utils/geo.helper.js';
 
 /**
  * Helper to resolve Employee for current user/request
+ * Supports both self-punch (Employee, HR, Manager) and Admin proxy punch
  */
 const resolveEmployee = async (req, companyId) => {
   let employeeId = req.body.employeeId;
 
-  if (req.user.role === 'EMPLOYEE') {
-    const employee = await Employee.findOne({
-      companyId,
-      $or: [{ userId: req.user._id }, { email: req.user.email.toLowerCase() }],
-    });
+  // 1. Agar request body mein explicit employeeId di gayi hai (HR kisi aur ki punch kar raha hai)
+  if (employeeId) {
+    const employee = await Employee.findOne({ _id: employeeId, companyId });
     if (!employee) {
-      throw new ApiError(404, 'Employee profile not linked to your user account.');
+      throw new ApiError(404, 'Employee not found in your company.');
     }
     return employee;
   }
 
-  // For Admin / HR
-  if (!employeeId) {
-    throw new ApiError(400, 'employeeId is required for HR/Admin operations.');
+  // 2. Self-Punch (Chahe user ka role EMPLOYEE ho, HR ho, MANAGER ho ya ADMIN):
+  // User ke linked Employee record ko find karein
+  const employee = await Employee.findOne({
+    companyId,
+    $or: [
+      { userId: req.user._id },
+      { email: req.user.email ? req.user.email.toLowerCase() : '' }
+    ],
+  });
+
+  if (!employee) {
+    throw new ApiError(
+      404,
+      `Your account (${req.user.email}) is not linked to an active Employee profile in this company.`
+    );
   }
 
-  const employee = await Employee.findOne({ _id: employeeId, companyId });
-  if (!employee) {
-    throw new ApiError(404, 'Employee not found in your company.');
-  }
   return employee;
 };
 
