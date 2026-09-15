@@ -3,7 +3,6 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PERMISSIONS } from '../config/permissions.js';
 
-
 const Icons = {
   Overview: () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -35,6 +34,11 @@ const Icons = {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" />
       <polyline points="17 11 19 13 23 9" />
+    </svg>
+  ),
+  Chat: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   ),
   Leaves: () => (
@@ -122,6 +126,12 @@ export default function AppSidebar() {
       path: '/company-admin/attendance',
       Icon: Icons.Attendance,
       isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.ATTENDANCE.READ),
+    },
+    {
+      label: 'Direct Chat Desk',
+      path: '/company-admin/communication',
+      Icon: Icons.Chat,
+      isAccessible: true,
     },
     {
       label: 'Leave Operations',

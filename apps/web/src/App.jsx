@@ -30,6 +30,7 @@ import OrganizationSettings from './features/admin/OrganizationSettings.jsx';
 import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
 import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
 import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
+import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
 
 // Public Route Guard
 function PublicOnlyRoute({ children }) {
@@ -272,6 +273,16 @@ export default function App() {
               ]}
             >
               <OrganizationSettings />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Direct Chat Desk Integration (TICKET-034) */}
+        <Route
+          path="communication"
+          element={
+            <ProtectedRoute>
+              <DirectChatDesk />
             </ProtectedRoute>
           }
         />
