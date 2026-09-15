@@ -31,7 +31,7 @@ import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
 import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
 import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
 import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
-
+import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
 
 // Public Route Guard
 function PublicOnlyRoute({ children }) {
@@ -225,6 +225,16 @@ export default function App() {
           }
         />
 
+        {/* Direct Chat Desk Integration (TICKET-034) */}
+        <Route
+          path="communication"
+          element={
+            <ProtectedRoute>
+              <DirectChatDesk />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Leave Operations */}
         <Route
           path="leaves"
@@ -250,14 +260,26 @@ export default function App() {
           }
         />
 
-        {/* Company Finance */}
+        {/* 1. Executive Macro Financial Overview */}
+        <Route
+          path="finance-overview"
+          element={
+            <ProtectedRoute
+              requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}
+            >
+              <CompanyFinance />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 2. Operational Finance & Expense Claims Desk */}
         <Route
           path="finance"
           element={
             <ProtectedRoute
               requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}
             >
-              <CompanyFinance />
+              <FinanceOperationsDesk />
             </ProtectedRoute>
           }
         />
@@ -274,16 +296,6 @@ export default function App() {
               ]}
             >
               <OrganizationSettings />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Direct Chat Desk Integration (TICKET-034) */}
-        <Route
-          path="communication"
-          element={
-            <ProtectedRoute>
-              <DirectChatDesk />
             </ProtectedRoute>
           }
         />
