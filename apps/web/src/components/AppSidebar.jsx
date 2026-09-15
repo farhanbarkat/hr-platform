@@ -56,6 +56,14 @@ const Icons = {
       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </svg>
   ),
+  Ledger: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <line x1="9" y1="7" x2="15" y2="7" />
+      <line x1="9" y1="11" x2="13" y2="11" />
+    </svg>
+  ),
   Roles: () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -157,9 +165,15 @@ export default function AppSidebar() {
 
   const platformNav = [
     {
-      label: 'Company Finance',
-      path: '/company-admin/finance',
+      label: 'Executive Financials',
+      path: '/company-admin/finance-overview',
       Icon: Icons.Finance,
+      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.FINANCE.VIEW_DASHBOARD),
+    },
+    {
+      label: 'Finance & Claims Desk',
+      path: '/company-admin/finance',
+      Icon: Icons.Ledger,
       isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.FINANCE.VIEW_DASHBOARD),
     },
     {
