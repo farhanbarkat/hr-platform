@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import ApplyLeaveModal from '../leave/ApplyLeaveModal.jsx';
+import AttendancePunchCard from '../attendance/AttendancePunchCard.jsx';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -12,9 +13,6 @@ export default function EmployeeDashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [error, setError] = useState(null);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-
-  const [clockLoading, setClockLoading] = useState(false);
-  const [clockFeedback, setClockFeedback] = useState(null);
 
   const fetchDashboard = async () => {
     try {
@@ -37,35 +35,6 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     fetchDashboard();
   }, []);
-
-  const handlePunch = async (type) => {
-    try {
-      setClockLoading(true);
-      setClockFeedback(null);
-
-      const profile = dashboardData?.profile;
-      const targetEmpId = profile?.employeeId || profile?._id || user?.employeeId || user?._id;
-
-      const res = await apiClient.post(`/attendance/${type}`, {
-        employeeId: targetEmpId,
-        source: 'WEB_ESS',
-        timestamp: new Date().toISOString(),
-      });
-
-      setClockFeedback({
-        text: res.data?.message || `Clocked ${type} successfully recorded.`,
-        ok: true,
-      });
-      fetchDashboard();
-    } catch (err) {
-      setClockFeedback({
-        text: err.response?.data?.message || `Failed to ${type}.`,
-        ok: false,
-      });
-    } finally {
-      setClockLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -127,48 +96,15 @@ export default function EmployeeDashboard() {
       </div>
 
       {/* 2. Top Attendance Strip & Clock Punch */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* Clock Punch Desk */}
-        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs flex flex-col justify-between">
-          <div>
-            <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
-              LIVE SHIFT PUNCH
-            </span>
-            <h3 className="text-sm font-bold text-[#16233B] mt-1">Shift Time Tracker</h3>
-            <p className="text-xs text-[#728294] mt-0.5">Log operational check-in / check-out timestamps.</p>
-          </div>
-
-          {clockFeedback && (
-            <div className={`my-3 text-xs font-mono p-2.5 rounded border ${
-              clockFeedback.ok
-                ? 'bg-[#EBF7F0] border-[#C6EAD3] text-[#1E7E34]'
-                : 'bg-[#FDEEEB] border-[#F5C2BA] text-[#B83E28]'
-            }`}>
-              {clockFeedback.text}
-            </div>
-          )}
-
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={() => handlePunch('check-in')}
-              disabled={clockLoading}
-              className="flex-1 py-2 bg-[#1E7E34] hover:bg-[#18662A] text-white text-xs font-mono font-bold rounded cursor-pointer disabled:opacity-50 transition-colors"
-            >
-              {clockLoading ? 'PUNCHING...' : 'CLOCK IN'}
-            </button>
-            <button
-              onClick={() => handlePunch('check-out')}
-              disabled={clockLoading}
-              className="flex-1 py-2 bg-[#B83E28] hover:bg-[#97321F] text-white text-xs font-mono font-bold rounded cursor-pointer disabled:opacity-50 transition-colors"
-            >
-              {clockLoading ? 'PUNCHING...' : 'CLOCK OUT'}
-            </button>
-          </div>
+        {/* Real-Time Geofenced GPS Punch Station */}
+        <div className="lg:col-span-4">
+          <AttendancePunchCard onRecordUpdated={fetchDashboard} />
         </div>
 
         {/* Current Month Attendance Telemetry */}
-        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs md:col-span-2 flex flex-col justify-between">
+        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs lg:col-span-8 flex flex-col justify-between min-h-[290px]">
           <div>
             <div className="flex justify-between items-center">
               <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
@@ -181,28 +117,28 @@ export default function EmployeeDashboard() {
             <h3 className="text-sm font-bold text-[#16233B] mt-1">Monthly Shift Summary</h3>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-center my-3">
-            <div className="p-2 bg-[#FAF8F5] border border-[#EFECE6] rounded">
-              <div className="text-lg font-bold font-mono text-[#1E7E34]">{attendance?.presentDays ?? 0}</div>
-              <div className="text-[9px] font-mono text-[#728294]">PRESENT</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center my-4">
+            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+              <div className="text-xl font-bold font-mono text-[#1E7E34]">{attendance?.presentDays ?? 0}</div>
+              <div className="text-[9px] font-mono text-[#728294] mt-0.5">PRESENT</div>
             </div>
-            <div className="p-2 bg-[#FAF8F5] border border-[#EFECE6] rounded">
-              <div className="text-lg font-bold font-mono text-[#B83E28]">{attendance?.absentDays ?? 0}</div>
-              <div className="text-[9px] font-mono text-[#728294]">ABSENT</div>
+            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+              <div className="text-xl font-bold font-mono text-[#B83E28]">{attendance?.absentDays ?? 0}</div>
+              <div className="text-[9px] font-mono text-[#728294] mt-0.5">ABSENT</div>
             </div>
-            <div className="p-2 bg-[#FAF8F5] border border-[#EFECE6] rounded">
-              <div className="text-lg font-bold font-mono text-[#8C5D17]">{attendance?.lateDays ?? 0}</div>
-              <div className="text-[9px] font-mono text-[#728294]">LATE DAYS</div>
+            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+              <div className="text-xl font-bold font-mono text-[#8C5D17]">{attendance?.lateDays ?? 0}</div>
+              <div className="text-[9px] font-mono text-[#728294] mt-0.5">LATE DAYS</div>
             </div>
-            <div className="p-2 bg-[#FAF8F5] border border-[#EFECE6] rounded">
-              <div className="text-lg font-bold font-mono text-[#16233B]">{attendance?.totalLoggedDays ?? 0}</div>
-              <div className="text-[9px] font-mono text-[#728294]">LOGGED DAYS</div>
+            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+              <div className="text-xl font-bold font-mono text-[#16233B]">{attendance?.totalLoggedDays ?? 0}</div>
+              <div className="text-[9px] font-mono text-[#728294] mt-0.5">LOGGED DAYS</div>
             </div>
           </div>
 
-          <div className="text-[11px] text-[#728294] flex justify-between pt-2 border-t border-[#F4F1EA]">
+          <div className="text-[11px] text-[#728294] flex justify-between pt-3 border-t border-[#F4F1EA]">
             <span>Half Days: <b className="font-mono text-[#16233B]">{attendance?.halfDays ?? 0}</b></span>
-            <span className="font-mono">Real-time sync</span>
+            <span className="font-mono text-[10px] text-[#1E7E34]">Telemetry Live Synced ✓</span>
           </div>
         </div>
 
