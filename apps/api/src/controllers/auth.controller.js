@@ -1,6 +1,7 @@
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
@@ -24,7 +25,7 @@ const MANDATORY_2FA_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR'];
 const getChallengeUserId = (req) => req.challengeUser?._id;
 
 /**
- * @desc    Login Step 1 (Password verification)
+ * @desc    Login Step 1 (Password verification & 2FA evaluation)
  * @route   POST /api/v1/auth/login
  */
 export const login = asyncHandler(async (req, res) => {
@@ -34,74 +35,91 @@ export const login = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Email and password are required.');
   }
 
-  const user = await User.findOne({ email: email.toLowerCase() }).select(
-    '+password +twoFactorSecret'
+  const normalizedEmail = String(email).trim().toLowerCase();
+
+  // Fetch user along with password and 2FA secrets
+  const user = await User.findOne({ email: normalizedEmail }).select(
+    '+password +twoFactorSecret +twoFactorRecoveryCodes'
   );
+
   const GENERIC_ERROR = 'Email or password is incorrect.';
 
   if (!user) {
     throw new ApiError(401, GENERIC_ERROR);
   }
 
-  if (user.isLocked()) {
-    throw new ApiError(423, 'Account is temporarily locked.');
+  // Account lock check
+  if (user.isLocked && typeof user.isLocked === 'function' && user.isLocked()) {
+    throw new ApiError(423, 'Account is temporarily locked due to repeated failed attempts. Please try again later.');
   }
 
   const isPasswordValid = await user.isPasswordCorrect(password);
 
   if (!isPasswordValid) {
-    user.failedLoginAttempts += 1;
+    user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
     if (user.failedLoginAttempts >= 5) {
-      user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 mins lock
     }
     await user.save();
     throw new ApiError(401, GENERIC_ERROR);
   }
 
+  // Credentials are valid: Reset failed counter and lock state
   user.failedLoginAttempts = 0;
   user.lockUntil = null;
   await user.save();
 
-  const isMandatory = MANDATORY_2FA_ROLES.includes(user.role);
-  const requires2FA = isMandatory || user.isTwoFactorEnabled;
+  // 2FA Evaluation Logic:
+  // Requires 2FA ONLY IF user has actually enrolled a secret OR role has configured secret.
+  const hasEnrolledSecret = Boolean(user.twoFactorSecret);
+  const requires2FA = (user.isTwoFactorEnabled || MANDATORY_2FA_ROLES.includes(user.role)) && hasEnrolledSecret;
 
   if (requires2FA) {
     const challengeToken = generate2FAChallengeToken(user);
     return res.status(200).json(
       new ApiResponse(
         200,
-        { requires2FA: true, isEnrolled: user.isTwoFactorEnabled, challengeToken },
+        { requires2FA: true, isEnrolled: true, challengeToken },
         '2FA verification required.'
       )
     );
   }
 
+  // Direct login when 2FA is not enrolled or disabled
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
+  user.refreshTokens = user.refreshTokens || [];
   user.refreshTokens.push({ tokenHash: hashToken(refreshToken) });
   await user.save();
+
+  // Sanitize user output
+  const userResponse = user.toObject();
+  delete userResponse.password;
+  delete userResponse.twoFactorSecret;
+  delete userResponse.twoFactorRecoveryCodes;
+  delete userResponse.refreshTokens;
 
   return res
     .status(200)
     .cookie('refreshToken', refreshToken, cookieOptions)
-    .json(new ApiResponse(200, { user, accessToken }, 'User logged in successfully.'));
+    .json(
+      new ApiResponse(
+        200,
+        { user: userResponse, accessToken },
+        'User logged in successfully.'
+      )
+    );
 });
 
 /**
  * @desc    Setup 2FA - Generates Secret & QR Code
  * @route   POST /api/v1/auth/2fa/setup
  */
-/**
- * @desc    Setup 2FA - Generates Secret & QR Code via Challenge Token
- * @route   POST /api/v1/auth/2fa/setup
- */
-/**
- * @desc    Setup 2FA - Generates Secret & QR Code
- * @route   POST /api/v1/auth/2fa/setup
- */
 export const setup2FA = asyncHandler(async (req, res) => {
-  const user = await User.findById(getChallengeUserId(req));
+  const userId = getChallengeUserId(req) || req.user?._id;
+  const user = await User.findById(userId);
+
   if (!user) {
     throw new ApiError(404, 'User not found.');
   }
@@ -141,7 +159,8 @@ export const setup2FA = asyncHandler(async (req, res) => {
  */
 export const confirm2FASetup = asyncHandler(async (req, res) => {
   const { code } = req.body || {};
-  const user = await User.findById(getChallengeUserId(req)).select('+twoFactorSecret');
+  const userId = getChallengeUserId(req) || req.user?._id;
+  const user = await User.findById(userId).select('+twoFactorSecret');
 
   if (!code) {
     throw new ApiError(400, 'Verification code is required.');
@@ -172,21 +191,19 @@ export const confirm2FASetup = asyncHandler(async (req, res) => {
  * @desc    Verify TOTP or Recovery Code during Login Step 2
  * @route   POST /api/v1/auth/2fa/verify-login
  */
-
-
-
 export const verify2FALogin = asyncHandler(async (req, res) => {
   const { code, recoveryCode } = req.body;
 
   if (!code && !recoveryCode) {
-    throw new ApiError(
-      400,
-      'Verification code or recovery code is required.'
-    );
+    throw new ApiError(400, 'Verification code or recovery code is required.');
   }
 
-  // Strictly select twoFactorSecret & twoFactorRecoveryCodes
-  const user = await User.findById(getChallengeUserId(req)).select(
+  const userId = getChallengeUserId(req);
+  if (!userId) {
+    throw new ApiError(401, 'Invalid or expired 2FA challenge session. Please log in again.');
+  }
+
+  const user = await User.findById(userId).select(
     '+twoFactorSecret +twoFactorRecoveryCodes'
   );
 
@@ -201,8 +218,8 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
     isValid = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       encoding: 'base32',
-      token: code,
-      window: 1, // Time drift allowance
+      token: String(code).trim(),
+      window: 1,
     });
   }
 
@@ -210,10 +227,10 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
   if (!isValid && recoveryCode) {
     const hashedCode = crypto
       .createHash('sha256')
-      .update(recoveryCode)
+      .update(String(recoveryCode).trim())
       .digest('hex');
 
-    const matchedIndex = user.twoFactorRecoveryCodes.findIndex(
+    const matchedIndex = (user.twoFactorRecoveryCodes || []).findIndex(
       (rc) => rc.codeHash === hashedCode && !rc.used
     );
 
@@ -232,8 +249,15 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
+  user.refreshTokens = user.refreshTokens || [];
   user.refreshTokens.push({ tokenHash: hashToken(refreshToken) });
   await user.save();
+
+  const userResponse = user.toObject();
+  delete userResponse.password;
+  delete userResponse.twoFactorSecret;
+  delete userResponse.twoFactorRecoveryCodes;
+  delete userResponse.refreshTokens;
 
   return res
     .status(200)
@@ -241,7 +265,7 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        { user, accessToken },
+        { user: userResponse, accessToken },
         '2FA verified and login complete.'
       )
     );
@@ -271,7 +295,7 @@ export const refreshToken = asyncHandler(async (req, res) => {
   }
 
   const incomingHash = hashToken(incomingRefreshToken);
-  const tokenIndex = user.refreshTokens.findIndex((t) => t.tokenHash === incomingHash);
+  const tokenIndex = (user.refreshTokens || []).findIndex((t) => t.tokenHash === incomingHash);
 
   if (tokenIndex === -1) {
     user.refreshTokens = [];
@@ -300,7 +324,7 @@ export const refreshToken = asyncHandler(async (req, res) => {
 export const logout = asyncHandler(async (req, res) => {
   const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
-  if (incomingRefreshToken) {
+  if (incomingRefreshToken && req.user?._id) {
     const incomingHash = hashToken(incomingRefreshToken);
     await User.findByIdAndUpdate(req.user._id, {
       $pull: { refreshTokens: { tokenHash: incomingHash } },
@@ -312,6 +336,11 @@ export const logout = asyncHandler(async (req, res) => {
     .clearCookie('refreshToken', cookieOptions)
     .json(new ApiResponse(200, {}, 'Logged out successfully.'));
 });
+
+/**
+ * @desc    Register Device Push Token
+ * @route   POST /api/v1/auth/device-token
+ */
 export const registerDeviceToken = asyncHandler(async (req, res) => {
   const { token, platform, deviceId } = req.body;
   const userId = req.user._id;
@@ -321,7 +350,7 @@ export const registerDeviceToken = asyncHandler(async (req, res) => {
   }
 
   await User.findByIdAndUpdate(userId, {
-    $pull: { pushTokens: { deviceId } }, // Remove old token for this device if exists
+    $pull: { pushTokens: { deviceId } },
   });
 
   await User.findByIdAndUpdate(userId, {
@@ -354,7 +383,6 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Active user session not found.');
   }
 
-  // Remove sensitive security artifacts
   delete user.password;
   delete user.twoFactorSecret;
   delete user.twoFactorRecoveryCodes;
