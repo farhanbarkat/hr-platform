@@ -32,6 +32,7 @@ import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
 import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
 import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
 import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
+import { LoanManagementDesk } from './features/loans/index.js';
 
 // Public Route Guard
 function PublicOnlyRoute({ children }) {
@@ -140,7 +141,10 @@ export default function App() {
           <ProtectedRoute
             checkAccess={(authUser, hasAnyPerm) => {
               const role = String(authUser.role || '').toUpperCase();
-              if (['COMPANY_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(role) || authUser.isCompanyOwner) {
+              if (
+                ['COMPANY_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(role) ||
+                authUser.isCompanyOwner
+              ) {
                 return true;
               }
               return hasAnyPerm([
@@ -280,6 +284,16 @@ export default function App() {
               requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}
             >
               <FinanceOperationsDesk />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Loan & Advances Management Desk */}
+        <Route
+          path="loans"
+          element={
+            <ProtectedRoute>
+              <LoanManagementDesk />
             </ProtectedRoute>
           }
         />

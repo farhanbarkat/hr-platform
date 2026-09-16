@@ -5,24 +5,65 @@ import { PERMISSIONS } from '../config/permissions.js';
 
 const Icons = {
   Overview: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
     </svg>
   ),
   Workforce: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   ),
   Departments: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   ),
   Incharge: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="3" />
       <path d="M3 7V5a2 2 0 0 1 2-2h2" />
       <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -31,33 +72,93 @@ const Icons = {
     </svg>
   ),
   Attendance: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
       <polyline points="17 11 19 13 23 9" />
     </svg>
   ),
   Chat: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   ),
   Leaves: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   ),
   Payroll: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
     </svg>
   ),
   Finance: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="12" y1="1" x2="12" y2="23" />
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </svg>
   ),
   Ledger: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
       <line x1="9" y1="7" x2="15" y2="7" />
@@ -65,29 +166,78 @@ const Icons = {
     </svg>
   ),
   Roles: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <path d="m9 12 2 2 4-4" />
     </svg>
   ),
   Settings: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   ),
+
+  Loan: () => (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+      <path d="M12 6V4m0 16v-2" />
+    </svg>
+  ),
+
   SignOut: () => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   ),
 };
 
 export default function AppSidebar() {
-  const { user, logout, hasPermission, hasAnyPermission, isSuperAdmin } = useAuth();
+  const { user, logout, hasPermission, hasAnyPermission, isSuperAdmin } =
+    useAuth();
   const navigate = useNavigate();
 
-  const isCompanyAdmin = user?.role === 'COMPANY_ADMIN' || user?.role === 'ADMIN';
+  const isCompanyAdmin =
+    user?.role === 'COMPANY_ADMIN' || user?.role === 'ADMIN';
 
   const [resolvedCompanyName, setResolvedCompanyName] = useState(() => {
     return user?.companyName || user?.company?.name || 'Cloudlogic';
@@ -110,13 +260,19 @@ export default function AppSidebar() {
       label: 'Workforce Directory',
       path: '/company-admin/employees',
       Icon: Icons.Workforce,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.EMPLOYEE.READ),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.EMPLOYEE.READ),
     },
     {
       label: 'Departments & Shifts',
       path: '/company-admin/departments',
       Icon: Icons.Departments,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.COMPANY.READ),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.COMPANY.READ),
     },
     {
       label: 'Shift Incharge Desk',
@@ -133,7 +289,10 @@ export default function AppSidebar() {
       label: 'Time & Attendance',
       path: '/company-admin/attendance',
       Icon: Icons.Attendance,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.ATTENDANCE.READ),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.ATTENDANCE.READ),
     },
     {
       label: 'Direct Chat Desk',
@@ -159,7 +318,17 @@ export default function AppSidebar() {
       label: 'Payroll & Compensation',
       path: '/company-admin/payroll',
       Icon: Icons.Payroll,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.PAYROLL.READ),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.PAYROLL.READ),
+    },
+
+    {
+      label: 'Loan & Advances',
+      path: '/company-admin/loans',
+      Icon: Icons.Loan,
+      isAccessible: true,
     },
   ];
 
@@ -168,19 +337,28 @@ export default function AppSidebar() {
       label: 'Executive Financials',
       path: '/company-admin/finance-overview',
       Icon: Icons.Finance,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.FINANCE.VIEW_DASHBOARD),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.FINANCE.VIEW_DASHBOARD),
     },
     {
       label: 'Finance & Claims Desk',
       path: '/company-admin/finance',
       Icon: Icons.Ledger,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.FINANCE.VIEW_DASHBOARD),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.FINANCE.VIEW_DASHBOARD),
     },
     {
       label: 'Roles & Delegation',
       path: '/company-admin/roles-capabilities',
       Icon: Icons.Roles,
-      isAccessible: isSuperAdmin || isCompanyAdmin || hasPermission(PERMISSIONS.COMPANY.CONFIGURE),
+      isAccessible:
+        isSuperAdmin ||
+        isCompanyAdmin ||
+        hasPermission(PERMISSIONS.COMPANY.CONFIGURE),
     },
     {
       label: 'Organization Settings',
@@ -279,7 +457,9 @@ export default function AppSidebar() {
         <div className="flex items-center justify-between px-0.5">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-[#18263D] border border-[#2B3E5E] flex items-center justify-center text-[10.5px] font-bold text-white">
-              {user?.firstName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'A'}
+              {user?.firstName?.charAt(0) ||
+                user?.email?.charAt(0).toUpperCase() ||
+                'A'}
             </div>
 
             <div className="overflow-hidden">

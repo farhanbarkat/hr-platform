@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -14,6 +14,18 @@ export default function EmployeeDashboard() {
   const [error, setError] = useState(null);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
+  // 🏦 Loan Application & Telemetry State
+  const [myLoans, setMyLoans] = useState([]);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+  const [loanSubmitting, setLoanSubmitting] = useState(false);
+  const [loanForm, setLoanForm] = useState({
+    principal: '',
+    tenureMonths: 12,
+    purpose: '',
+  });
+  const [loanFeedback, setLoanFeedback] = useState(null);
+
+  // 1. Fetch Core Dashboard Telemetry
   const fetchDashboard = async () => {
     try {
       setLoading(true);
@@ -32,9 +44,50 @@ export default function EmployeeDashboard() {
     }
   };
 
+  // 2. Fetch Employee Personal Loans (TICKET-029)
+  const fetchMyLoans = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/loans/my-loans');
+      setMyLoans(res.data?.data || []);
+    } catch (err) {
+      console.warn('Failed to load employee loans:', err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDashboard();
-  }, []);
+    fetchMyLoans();
+  }, [fetchMyLoans]);
+
+  // 3. Handle Loan Submission directly from ESS
+  const handleApplyLoan = async (e) => {
+    e.preventDefault();
+    try {
+      setLoanSubmitting(true);
+      setLoanFeedback(null);
+
+      await apiClient.post('/loans/apply', {
+        principal: parseFloat(loanForm.principal),
+        tenureMonths: parseInt(loanForm.tenureMonths, 10),
+        purpose: loanForm.purpose,
+      });
+
+      setLoanFeedback({
+        ok: true,
+        text: 'Loan petition submitted successfully for HR & Admin review.',
+      });
+      setLoanForm({ principal: '', tenureMonths: 12, purpose: '' });
+      setIsLoanModalOpen(false);
+      fetchMyLoans();
+    } catch (err) {
+      setLoanFeedback({
+        ok: false,
+        text: err.response?.data?.message || 'Failed to submit loan petition.',
+      });
+    } finally {
+      setLoanSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -63,6 +116,14 @@ export default function EmployeeDashboard() {
   }
 
   const { profile, attendance, leaves, payslips, tasks } = dashboardData || {};
+
+  // Find active loan if available
+  const activeLoan = myLoans.find((l) => ['APPROVED', 'APPLIED'].includes(l.status));
+  const activePrincipal = parseFloat(activeLoan?.principal?.toString() || 0);
+  const activeBalance = parseFloat(activeLoan?.remainingBalance?.toString() || 0);
+  const activeEmi = parseFloat(activeLoan?.monthlyEmi?.toString() || 0);
+  const activePaid = activePrincipal - activeBalance;
+  const repaymentPercent = activePrincipal > 0 ? Math.min(100, Math.round((activePaid / activePrincipal) * 100)) : 0;
 
   return (
     <div className="space-y-6 max-w-[1300px] mx-auto select-none font-sans text-[#16233B] p-6 pb-16">
@@ -94,6 +155,17 @@ export default function EmployeeDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Global Feedback Banner for Loans */}
+      {loanFeedback && (
+        <div className={`p-3 rounded text-xs font-mono border ${
+          loanFeedback.ok
+            ? 'bg-[#EBF7F0] border-[#C6EAD3] text-[#1E7E34]'
+            : 'bg-[#FDEEEB] border-[#F5C2BA] text-[#B83E28]'
+        }`}>
+          {loanFeedback.text}
+        </div>
+      )}
 
       {/* 2. Top Attendance Strip & Clock Punch */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -144,7 +216,86 @@ export default function EmployeeDashboard() {
 
       </div>
 
-      {/* 3. Leave Balances & Active Tasks */}
+      {/* 3. Financial Advances & Loans Strip (TICKET-029 / TICKET-030) */}
+      <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#F4F1EA] gap-3">
+          <div>
+            <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
+              FINANCIAL ADVANCE & DISBURSEMENTS
+            </span>
+            <h3 className="text-sm font-bold text-[#16233B] mt-0.5">
+              Salary Advances & Company Loans
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <button
+              onClick={() => navigate('/company-admin/loans')}
+              className="px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#FAF4E8] border border-[#D8D3C7] text-[#16233B] font-bold rounded cursor-pointer transition-colors"
+            >
+              Audit Ledger &rarr;
+            </button>
+            <button
+              onClick={() => setIsLoanModalOpen(true)}
+              className="px-3.5 py-1.5 bg-[#8C5D17] hover:bg-[#734B12] text-white font-bold rounded cursor-pointer transition-colors shadow-2xs"
+            >
+              + APPLY ADVANCE
+            </button>
+          </div>
+        </div>
+
+        {activeLoan ? (
+          <div className="mt-4 p-4 bg-[#FAF8F5] border border-[#EFECE6] rounded-lg space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold font-mono text-[#16233B]">
+                    {activePrincipal.toLocaleString()} PKR
+                  </span>
+                  <span className={`text-[9.5px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                    activeLoan.status === 'APPROVED' ? 'bg-[#EBF7F0] text-[#1E7E34] border border-[#C6EAD3]' :
+                    'bg-[#FAF4E8] text-[#8C5D17] border border-[#E8D4B5]'
+                  }`}>
+                    {activeLoan.status}
+                  </span>
+                </div>
+                <div className="text-xs text-[#5B6B79] mt-0.5 font-sans">
+                  Purpose: <b className="text-[#16233B]">{activeLoan.purpose || 'Personal Support'}</b>
+                </div>
+              </div>
+
+              <div className="font-mono text-xs sm:text-right">
+                <span className="text-[#728294] block text-[9.5px]">PAYROLL RECOVERY EMI:</span>
+                <span className="font-bold text-[#8C5D17] text-sm">
+                  {activeEmi.toLocaleString()} PKR / mo
+                </span>
+              </div>
+            </div>
+
+            {/* Repayment Progress for Approved Loan */}
+            {activeLoan.status === 'APPROVED' && (
+              <div className="pt-2 border-t border-[#E3DED4]/60">
+                <div className="flex justify-between text-[10.5px] font-mono text-[#728294] mb-1">
+                  <span>Paid Off: <b>{activePaid.toLocaleString()} PKR</b> ({repaymentPercent}%)</span>
+                  <span>Balance Due: <b className="text-[#16233B]">{activeBalance.toLocaleString()} PKR</b></span>
+                </div>
+                <div className="w-full h-2.5 bg-[#E3DED4] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#1E7E34] rounded-full transition-all duration-500"
+                    style={{ width: `${repaymentPercent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-6 text-center font-mono text-xs text-[#728294]">
+            No active loan balance or pending application. You are eligible to apply for an advance.
+          </div>
+        )}
+      </div>
+
+      {/* 4. Leave Balances & Active Tasks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         
         {/* Leave Balances Quota */}
@@ -268,7 +419,7 @@ export default function EmployeeDashboard() {
 
       </div>
 
-      {/* 4. Latest Payslips Drawer */}
+      {/* 5. Latest Payslips Drawer */}
       <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs">
         <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
           COMPENSATION ARCHIVE
@@ -300,12 +451,100 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* 5. Apply Leave Modal */}
+      {/* 6. Modals */}
       <ApplyLeaveModal
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
         onSuccess={fetchDashboard}
       />
+
+      {/* Loan Application Modal */}
+      {isLoanModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg border border-[#E3DED4] p-6 max-w-md w-full shadow-lg font-sans">
+            <h3 className="text-sm font-bold text-[#16233B]">Apply for Salary Advance / Loan</h3>
+            <p className="text-xs text-[#728294] mt-1 font-mono">
+              Auto-repaid via payroll installments across selected tenure months.
+            </p>
+
+            <form onSubmit={handleApplyLoan} className="space-y-4 mt-4 text-xs">
+              <div>
+                <label className="text-[10px] font-mono uppercase text-[#728294] block mb-1">
+                  Requested Principal (PKR)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1000"
+                  step="500"
+                  value={loanForm.principal}
+                  onChange={(e) => setLoanForm({ ...loanForm, principal: e.target.value })}
+                  placeholder="e.g. 100000"
+                  className="w-full p-2.5 border border-[#D8D3C7] rounded outline-none focus:border-[#8C5D17] font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono uppercase text-[#728294] block mb-1">
+                  Tenure (Months)
+                </label>
+                <select
+                  value={loanForm.tenureMonths}
+                  onChange={(e) => setLoanForm({ ...loanForm, tenureMonths: e.target.value })}
+                  className="w-full p-2.5 border border-[#D8D3C7] rounded outline-none focus:border-[#8C5D17] font-mono"
+                >
+                  <option value={3}>3 Months</option>
+                  <option value={6}>6 Months</option>
+                  <option value={12}>12 Months (1 Year)</option>
+                  <option value={24}>24 Months (2 Years)</option>
+                </select>
+              </div>
+
+              {/* Live EMI Calculation preview */}
+              {loanForm.principal && (
+                <div className="p-3 bg-[#FAF8F5] border border-[#E3DED4] rounded text-xs font-mono">
+                  <span className="text-[#728294] block text-[9.5px]">ESTIMATED MONTHLY DEDUCTION:</span>
+                  <span className="text-base font-bold text-[#8C5D17]">
+                    {(parseFloat(loanForm.principal) / parseInt(loanForm.tenureMonths, 10)).toFixed(2)}{' '}
+                    PKR / Month
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-mono uppercase text-[#728294] block mb-1">
+                  Purpose / Need
+                </label>
+                <textarea
+                  rows="2"
+                  required
+                  value={loanForm.purpose}
+                  onChange={(e) => setLoanForm({ ...loanForm, purpose: e.target.value })}
+                  placeholder="State the reason for financial assistance..."
+                  className="w-full p-2.5 border border-[#D8D3C7] rounded outline-none focus:border-[#8C5D17]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 font-mono">
+                <button
+                  type="button"
+                  onClick={() => setIsLoanModalOpen(false)}
+                  className="px-3 py-2 border border-[#D8D3C7] rounded text-[#728294] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loanSubmitting}
+                  className="px-4 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white font-bold rounded cursor-pointer disabled:opacity-50"
+                >
+                  {loanSubmitting ? 'Submitting...' : 'Dispatch Application'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
