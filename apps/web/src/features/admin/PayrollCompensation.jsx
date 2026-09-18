@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PERMISSIONS } from '../../config/permissions.js';
+import { PayslipViewerModal, PayslipAdjustmentModal } from '../payroll/index.js';
 
 export default function PayrollCompensation() {
   const { user, isSuperAdmin, hasPermission } = useAuth();
@@ -19,8 +20,9 @@ export default function PayrollCompensation() {
   const [feedback, setFeedback] = useState(null);
   const [search, setSearch] = useState('');
 
-  // Inspect Modal State
+  // Modular Modals State
   const [inspectSlip, setInspectSlip] = useState(null);
+  const [adjustingSlip, setAdjustingSlip] = useState(null);
 
   const canManagePayroll =
     isSuperAdmin ||
@@ -159,7 +161,6 @@ export default function PayrollCompensation() {
         });
       }
     } catch (err) {
-      // Direct fallback to Inspect View for printing
       setInspectSlip(slip);
       setFeedback({
         text: 'Cloud PDF engine offline. Opened printable payslip view for instant PDF saving.',
@@ -170,7 +171,7 @@ export default function PayrollCompensation() {
     }
   };
 
-  const totalGross = payslips.reduce((acc, p) => acc + (Number(p.grossPay || p.earnings?.totalEarnings || 0)), 0);
+  const totalGross = payslips.reduce((acc, p) => acc + (Number(p.grossPay || p.earnings?.totalEarnings || p.earnings?.grossPay || 0)), 0);
   const totalDeductions = payslips.reduce((acc, p) => acc + (Number(p.totalDeductions || p.deductions?.totalDeductions || 0)), 0);
   const totalNet = payslips.reduce((acc, p) => acc + (Number(p.netPay || 0)), 0);
 
@@ -293,7 +294,7 @@ export default function PayrollCompensation() {
           <div className="text-xl font-bold font-mono text-[#B83E28] mt-1">
             {totalDeductions.toLocaleString()} <span className="text-xs font-normal text-[#728294]">PKR</span>
           </div>
-          <div className="text-[10px] text-[#B83E28] mt-0.5">Absents & unpaid leaves</div>
+          <div className="text-[10px] text-[#B83E28] mt-0.5">Absents, leaves & loans</div>
         </div>
 
         <div className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs">
@@ -321,286 +322,125 @@ export default function PayrollCompensation() {
 
       {/* 4. Payslips Table */}
       <div className="bg-white border border-[#E3DED4] rounded-lg overflow-hidden shadow-2xs">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-[#E3DED4] bg-[#FAF8F5] text-[10px] font-mono uppercase tracking-wider text-[#728294]">
-              <th className="py-3 px-4">Employee</th>
-              <th className="py-3 px-4">Gross Pay</th>
-              <th className="py-3 px-4">Total Deductions</th>
-              <th className="py-3 px-4">Net Payable</th>
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#EFECE6] text-xs">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="py-8 text-center font-mono text-xs text-[#728294]">
-                  Synchronizing payroll run & payslips...
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-[#E3DED4] bg-[#FAF8F5] text-[10px] font-mono uppercase tracking-wider text-[#728294]">
+                <th className="py-3 px-4">Employee</th>
+                <th className="py-3 px-4">Gross Pay</th>
+                <th className="py-3 px-4">Total Deductions</th>
+                <th className="py-3 px-4">Net Payable</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
-            ) : filteredPayslips.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="py-12 text-center select-none">
-                  <div className="font-mono text-xs text-[#728294]">
-                    No payslips found for {monthNames[selectedMonth - 1]} {selectedYear}.
-                  </div>
-                  <p className="text-[11px] text-[#8C9BAE] mt-1 max-w-md mx-auto">
-                    Click "⚡ CALCULATE PAYROLL" above to trigger the payroll calculation orchestrator.
-                  </p>
-                </td>
-              </tr>
-            ) : (
-              filteredPayslips.map((slip) => {
-                const emp = slip.employeeId;
-                const gross = Number(slip.grossPay || slip.earnings?.totalEarnings || 0);
-                const deductions = Number(slip.totalDeductions || slip.deductions?.totalDeductions || 0);
-                const net = Number(slip.netPay || 0);
-                const isDownloading = pdfLoadingId === slip._id;
+            </thead>
+            <tbody className="divide-y divide-[#EFECE6] text-xs">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center font-mono text-xs text-[#728294]">
+                    Synchronizing payroll run & payslips...
+                  </td>
+                </tr>
+              ) : filteredPayslips.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center select-none">
+                    <div className="font-mono text-xs text-[#728294]">
+                      No payslips found for {monthNames[selectedMonth - 1]} {selectedYear}.
+                    </div>
+                    <p className="text-[11px] text-[#8C9BAE] mt-1 max-w-md mx-auto">
+                      Click "⚡ CALCULATE PAYROLL" above to trigger the payroll calculation orchestrator.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredPayslips.map((slip) => {
+                  const emp = slip.employeeId;
+                  const gross = Number(slip.grossPay || slip.earnings?.totalEarnings || slip.earnings?.grossPay || 0);
+                  const deductions = Number(slip.totalDeductions || slip.deductions?.totalDeductions || 0);
+                  const net = Number(slip.netPay || 0);
+                  const isDownloading = pdfLoadingId === slip._id;
 
-                return (
-                  <tr key={slip._id} className="hover:bg-[#FAF8F5]/60 transition-colors">
-                    {/* Employee Profile */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-[#16233B]">
-                        {emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : (slip.employeeName || 'Staff Member')}
-                      </div>
-                      <div className="text-[10px] font-mono text-[#728294]">
-                        {emp?.employeeCode || 'EMP'} • {emp?.userId?.email || 'Active'}
-                      </div>
-                    </td>
+                  return (
+                    <tr key={slip._id} className="hover:bg-[#FAF8F5]/60 transition-colors">
+                      {/* Employee Profile */}
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-[#16233B]">
+                          {emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : (slip.employeeName || 'Staff Member')}
+                        </div>
+                        <div className="text-[10px] font-mono text-[#728294]">
+                          {emp?.employeeCode || 'EMP'} • {emp?.userId?.email || 'Active'}
+                        </div>
+                      </td>
 
-                    {/* Gross */}
-                    <td className="py-3.5 px-4 font-mono font-semibold text-[#16233B]">
-                      {gross.toLocaleString()} <span className="text-[10px] text-[#728294]">PKR</span>
-                    </td>
+                      {/* Gross */}
+                      <td className="py-3.5 px-4 font-mono font-semibold text-[#16233B]">
+                        {gross.toLocaleString()} <span className="text-[10px] text-[#728294]">PKR</span>
+                      </td>
 
-                    {/* Deductions */}
-                    <td className="py-3.5 px-4 font-mono text-[#B83E28]">
-                      -{deductions.toLocaleString()} <span className="text-[10px] text-[#728294]">PKR</span>
-                    </td>
+                      {/* Deductions */}
+                      <td className="py-3.5 px-4 font-mono text-[#B83E28]">
+                        -{deductions.toLocaleString()} <span className="text-[10px] text-[#728294]">PKR</span>
+                      </td>
 
-                    {/* Net Pay */}
-                    <td className="py-3.5 px-4 font-mono font-bold text-[#1E7E34]">
-                      {net.toLocaleString()} <span className="text-[10px] text-[#728294]">PKR</span>
-                    </td>
+                      {/* Net Pay */}
+                      <td className="py-3.5 px-4 font-mono font-bold text-[#1E7E34]">
+                        {net.toLocaleString()} <span className="text-[10px] text-[#728294]">PKR</span>
+                      </td>
 
-                    {/* Status */}
-                    <td className="py-3.5 px-4">
-                      <span className={`inline-block px-2 py-0.5 text-[9px] font-mono rounded font-bold uppercase border ${
-                        slip.status === 'APPROVED' || slip.status === 'PAID'
-                          ? 'bg-[#EBF7F0] text-[#1E7E34] border-[#C6EAD3]'
-                          : 'bg-[#FAF4E8] text-[#8C5D17] border-[#E3DED4]'
-                      }`}>
-                        {slip.status}
-                      </span>
-                    </td>
+                      {/* Status */}
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-block px-2 py-0.5 text-[9px] font-mono rounded font-bold uppercase border ${
+                          slip.status === 'APPROVED' || slip.status === 'PAID'
+                            ? 'bg-[#EBF7F0] text-[#1E7E34] border-[#C6EAD3]'
+                            : 'bg-[#FAF4E8] text-[#8C5D17] border-[#E3DED4]'
+                        }`}>
+                          {slip.status}
+                        </span>
+                      </td>
 
-                    {/* Actions: Inspect & PDF */}
-                    <td className="py-3.5 px-4 text-right space-x-2">
-                      <button
-                        onClick={() => setInspectSlip(slip)}
-                        className="px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#D8D3C7] text-[#16233B] text-[10px] font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs"
-                      >
-                        🔍 INSPECT
-                      </button>
+                      {/* Actions: Inspect & PDF */}
+                      <td className="py-3.5 px-4 text-right space-x-2">
+                        <button
+                          onClick={() => setInspectSlip(slip)}
+                          className="px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#D8D3C7] text-[#16233B] text-[10px] font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs"
+                        >
+                          🔍 INSPECT
+                        </button>
 
-                      <button
-                        onClick={() => handleDownloadPdf(slip)}
-                        disabled={isDownloading}
-                        className="px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#FAF4E8] border border-[#D8D3C7] text-[#8C5D17] text-[10px] font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-                      >
-                        {isDownloading ? 'GETTING...' : 'PDF ↓'}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                        <button
+                          onClick={() => handleDownloadPdf(slip)}
+                          disabled={isDownloading}
+                          className="px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#FAF4E8] border border-[#D8D3C7] text-[#8C5D17] text-[10px] font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                        >
+                          {isDownloading ? 'GETTING...' : 'PDF ↓'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* 5. Comprehensive Inspect Slip Modal */}
-      {inspectSlip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white border border-[#E3DED4] rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in duration-150">
-            
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#E3DED4] flex justify-between items-center bg-[#FAF8F5]">
-              <div>
-                <span className="text-[9px] font-mono uppercase tracking-widest text-[#728294] font-bold">
-                  PAYROLL LEDGER AUDIT // COMPENSATION BREAKDOWN
-                </span>
-                <h2 className="text-base font-serif font-bold text-[#16233B]">
-                  Salary Voucher: {inspectSlip.employeeId?.firstName} {inspectSlip.employeeId?.lastName}
-                </h2>
-              </div>
-              <button
-                onClick={() => setInspectSlip(null)}
-                className="text-[#728294] hover:text-[#16233B] text-xl font-mono leading-none cursor-pointer p-1"
-              >
-                &times;
-              </button>
-            </div>
+      {/* Modular Inspect Modal */}
+      <PayslipViewerModal
+        slip={inspectSlip}
+        onClose={() => setInspectSlip(null)}
+        onAdjustmentTriggered={(slip) => {
+          setInspectSlip(null);
+          setAdjustingSlip(slip);
+        }}
+      />
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-5 text-xs max-h-[75vh] overflow-y-auto">
-              
-              {/* Profile Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#FAF8F5] p-3.5 rounded border border-[#E3DED4]">
-                <div>
-                  <span className="text-[9px] font-mono text-[#728294] uppercase block">EMPLOYEE CODE</span>
-                  <span className="font-mono font-bold text-[#16233B]">
-                    {inspectSlip.employeeId?.employeeCode || 'EMP-N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-mono text-[#728294] uppercase block">PERIOD</span>
-                  <span className="font-mono font-bold text-[#16233B]">
-                    {monthNames[selectedMonth - 1]} {selectedYear}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-mono text-[#728294] uppercase block">PAYROLL STATUS</span>
-                  <span className="font-mono font-bold text-[#8C5D17]">
-                    {inspectSlip.status}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-mono text-[#728294] uppercase block">TOTAL WORK DAYS</span>
-                  <span className="font-mono font-bold text-[#16233B]">
-                    {inspectSlip.attendanceSummary?.workedDays ?? inspectSlip.workedDays ?? 30} Days
-                  </span>
-                </div>
-              </div>
-
-              {/* Earnings vs Deductions Breakdown */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                {/* Earnings Column */}
-                <div className="border border-[#E3DED4] rounded-lg p-3.5 space-y-2.5">
-                  <div className="text-[10px] font-mono uppercase text-[#1E7E34] font-bold pb-1 border-b border-[#E3DED4] flex justify-between">
-                    <span>EARNINGS COMPONENT</span>
-                    <span>AMOUNT (PKR)</span>
-                  </div>
-
-                  <div className="flex justify-between font-mono text-xs">
-                    <span className="text-[#5B6B79]">Basic Salary</span>
-                    <span className="font-semibold text-[#16233B]">
-                      {Number(inspectSlip.earnings?.basicSalary || inspectSlip.basicSalary || inspectSlip.grossPay || 0).toLocaleString()}
-                    </span>
-                  </div>
-
-                  {inspectSlip.earnings?.allowances > 0 && (
-                    <div className="flex justify-between font-mono text-xs">
-                      <span className="text-[#5B6B79]">Allowances</span>
-                      <span className="font-semibold text-[#16233B]">
-                        {Number(inspectSlip.earnings.allowances).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-
-                  {inspectSlip.earnings?.overtimePay > 0 && (
-                    <div className="flex justify-between font-mono text-xs">
-                      <span className="text-[#5B6B79]">Overtime Pay</span>
-                      <span className="font-semibold text-[#16233B]">
-                        {Number(inspectSlip.earnings.overtimePay).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="pt-2 border-t border-[#EFECE6] flex justify-between font-mono font-bold text-[#1E7E34]">
-                    <span>Gross Earnings</span>
-                    <span>
-                      {Number(inspectSlip.grossPay || inspectSlip.earnings?.totalEarnings || 0).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Deductions Column */}
-                <div className="border border-[#E3DED4] rounded-lg p-3.5 space-y-2.5">
-                  <div className="text-[10px] font-mono uppercase text-[#B83E28] font-bold pb-1 border-b border-[#E3DED4] flex justify-between">
-                    <span>DEDUCTIONS COMPONENT</span>
-                    <span>AMOUNT (PKR)</span>
-                  </div>
-
-                  <div className="flex justify-between font-mono text-xs">
-                    <span className="text-[#5B6B79]">Attendance Absents Deduction</span>
-                    <span className="font-semibold text-[#B83E28]">
-                      -{Number(inspectSlip.deductions?.attendanceDeduction || inspectSlip.attendanceDeduction || 0).toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between font-mono text-xs">
-                    <span className="text-[#5B6B79]">Unpaid Leave Deductions</span>
-                    <span className="font-semibold text-[#B83E28]">
-                      -{Number(inspectSlip.deductions?.unpaidLeaveDeduction || inspectSlip.unpaidLeavesDeduction || 0).toLocaleString()}
-                    </span>
-                  </div>
-
-                  {inspectSlip.deductions?.tax > 0 && (
-                    <div className="flex justify-between font-mono text-xs">
-                      <span className="text-[#5B6B79]">Income Tax Withheld</span>
-                      <span className="font-semibold text-[#B83E28]">
-                        -{Number(inspectSlip.deductions.tax).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="pt-2 border-t border-[#EFECE6] flex justify-between font-mono font-bold text-[#B83E28]">
-                    <span>Total Deductions</span>
-                    <span>
-                      -{Number(inspectSlip.totalDeductions || inspectSlip.deductions?.totalDeductions || 0).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Net Payable Highlight Banner */}
-              <div className="bg-[#FAF4E8] border border-[#E3DED4] rounded-lg p-4 flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] font-mono text-[#8C5D17] uppercase tracking-wider block font-bold">
-                    NET DISBURSEMENT PAYABLE
-                  </span>
-                  <span className="text-xs text-[#5B6B79]">
-                    Calculated automatically via attendance, roster shifts, and leave records.
-                  </span>
-                </div>
-                <div className="text-2xl font-mono font-bold text-[#1E7E34]">
-                  {Number(inspectSlip.netPay || 0).toLocaleString()} <span className="text-xs text-[#728294]">PKR</span>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3.5 border-t border-[#E3DED4] bg-[#FAF8F5] flex justify-between items-center">
-              <span className="text-[10px] font-mono text-[#728294]">
-                Slip ID: <span className="text-[#16233B]">{inspectSlip._id}</span>
-              </span>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3.5 py-1.5 bg-white border border-[#D8D3C7] hover:bg-[#FAF8F5] text-xs font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs"
-                >
-                  🖨️ PRINT VOUCHER
-                </button>
-                <button
-                  onClick={() => handleDownloadPdf(inspectSlip)}
-                  className="px-4 py-1.5 bg-[#8C5D17] hover:bg-[#734B12] text-white text-xs font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs"
-                >
-                  DOWNLOAD PDF ↓
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
+      {/* Modular Post-Approval Adjustment Modal */}
+      <PayslipAdjustmentModal
+        slip={adjustingSlip}
+        onClose={() => setAdjustingSlip(null)}
+        onSuccess={fetchRuns}
+      />
 
     </div>
   );
-}
+}   
