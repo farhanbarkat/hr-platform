@@ -34,6 +34,7 @@ import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
 import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
 import { LoanManagementDesk } from './features/loans/index.js';
 import { TaskWorkspaceDesk } from './features/tasks/index.js';
+import { TaxWorkspaceDesk } from './features/tax/index.js';
 
 // Public Route Guard
 function PublicOnlyRoute({ children }) {
@@ -143,7 +144,13 @@ export default function App() {
             checkAccess={(authUser, hasAnyPerm) => {
               const role = String(authUser.role || '').toUpperCase();
               if (
-                ['COMPANY_ADMIN', 'ADMIN', 'SUPER_ADMIN', 'HR', 'MANAGER'].includes(role) ||
+                [
+                  'COMPANY_ADMIN',
+                  'ADMIN',
+                  'SUPER_ADMIN',
+                  'HR',
+                  'MANAGER',
+                ].includes(role) ||
                 authUser.isCompanyOwner
               ) {
                 return true;
@@ -299,6 +306,16 @@ export default function App() {
               requiredPermission={PERMISSIONS.FINANCE.VIEW_DASHBOARD}
             >
               <FinanceOperationsDesk />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Statutory Income Tax & Presets */}
+        <Route
+          path="tax"
+          element={
+            <ProtectedRoute>
+              <TaxWorkspaceDesk />
             </ProtectedRoute>
           }
         />
