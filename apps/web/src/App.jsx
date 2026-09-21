@@ -35,6 +35,7 @@ import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
 import { LoanManagementDesk } from './features/loans/index.js';
 import { TaskWorkspaceDesk } from './features/tasks/index.js';
 import { TaxWorkspaceDesk } from './features/tax/index.js';
+import { TeamHubDesk } from './features/teams/index.js';
 
 // Public Route Guard
 function PublicOnlyRoute({ children }) {
@@ -194,6 +195,16 @@ export default function App() {
           element={
             <ProtectedRoute requiredPermission={PERMISSIONS.EMPLOYEE.READ}>
               <WorkforceDirectory />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Team & Squad Operations */}
+        <Route
+          path="teams"
+          element={
+            <ProtectedRoute>
+              <TeamHubDesk />
             </ProtectedRoute>
           }
         />
