@@ -6,18 +6,64 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 /**
- * 1. Propose Shift Swap Request (Requester Employee)
+ * 0. Get Peers and Logged-In User Active Shifts
+ * GET /api/v1/shift-swaps/peers
+ */
+export const getEligiblePeersAndMyShifts = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user.companyId;
+
+  // Resolve current employee
+  const currentEmployee = await Employee.findOne({
+    $or: [{ userId: req.user._id }, { email: req.user.email }],
+    companyId,
+  });
+
+  if (!currentEmployee) {
+    throw new ApiError(404, 'Employee profile not found for logged in user.');
+  }
+
+  // Active shifts of logged-in employee
+  const myAssignments = await ShiftAssignment.find({
+    companyId,
+    employeeId: currentEmployee._id,
+  })
+    .populate('shiftTemplateId', 'name startTime endTime gracePeriodOverride')
+    .lean();
+
+  // Eligible colleagues in same company
+  const peers = await Employee.find({
+    companyId,
+    _id: { $ne: currentEmployee._id },
+    status: { $ne: 'TERMINATED' },
+  })
+    .select('firstName lastName designation department employeeCode')
+    .lean();
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        myEmployeeId: currentEmployee._id,
+        myAssignments,
+        peers,
+      },
+      'Eligible peers and active shifts retrieved successfully.'
+    )
+  );
+});
+
+/**
+ * 1. Propose Shift Swap Request
  * POST /api/v1/shift-swaps
  */
 export const proposeShiftSwap = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user.companyId;
   const { targetEmployeeId, requesterShiftAssignmentId, targetShiftAssignmentId, swapDate, reason } = req.body;
 
-  if (!targetEmployeeId || !requesterShiftAssignmentId || !targetShiftAssignmentId || !swapDate) {
-    throw new ApiError(400, 'Target employee, shift assignments, and swap date are required.');
+  if (!targetEmployeeId || !requesterShiftAssignmentId || !swapDate) {
+    throw new ApiError(400, 'Target employee, shift assignment, and swap date are required.');
   }
 
-  // 1. Resolve logged-in employee profile
   const requesterEmployee = await Employee.findOne({
     $or: [{ userId: req.user._id }, { email: req.user.email }],
     companyId,
@@ -38,37 +84,42 @@ export const proposeShiftSwap = asyncHandler(async (req, res) => {
   const endOfDay = new Date(parsedSwapDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  // 2. Validate Requester's Assignment
+  // Validate Requester's Assignment
   const reqAssignment = await ShiftAssignment.findOne({
     _id: requesterShiftAssignmentId,
     companyId,
     employeeId: requesterEmployee._id,
-    startDate: { $lte: endOfDay },
-    $or: [{ endDate: null }, { endDate: { $gte: startOfDay } }],
   });
 
   if (!reqAssignment) {
-    throw new ApiError(400, 'Invalid or inactive shift assignment for requester on this date.');
+    throw new ApiError(400, 'Invalid shift assignment for requester.');
   }
 
-  // 3. Validate Target's Assignment
-  const targetAssignment = await ShiftAssignment.findOne({
-    _id: targetShiftAssignmentId,
-    companyId,
-    employeeId: targetEmployeeId,
-    startDate: { $lte: endOfDay },
-    $or: [{ endDate: null }, { endDate: { $gte: startOfDay } }],
-  });
+  // Target assignment resolution (Find colleague assignment or fallback to colleague active assignment)
+  let targetAssignment = null;
+  if (targetShiftAssignmentId && targetShiftAssignmentId !== requesterShiftAssignmentId) {
+    targetAssignment = await ShiftAssignment.findOne({
+      _id: targetShiftAssignmentId,
+      companyId,
+      employeeId: targetEmployeeId,
+    });
+  }
 
   if (!targetAssignment) {
-    throw new ApiError(400, 'Invalid or inactive shift assignment for target colleague on this date.');
+    targetAssignment = await ShiftAssignment.findOne({
+      companyId,
+      employeeId: targetEmployeeId,
+    });
   }
 
-  // 4. Prevent duplicate pending requests for the same date & employee
+  // Agar target colleague ki assignment na mile toh same template structure allocate karein
+  const finalTargetAssignmentId = targetAssignment?._id || requesterShiftAssignmentId;
+
+  // Duplicate active pending request check
   const existingPending = await ShiftSwapRequest.findOne({
     companyId,
     requesterId: requesterEmployee._id,
-    swapDate: { $gte: startOfDay, $lte: endOfDay },
+    swapDate: { $gte: startOfDay,$lte: endOfDay },
     status: { $in: ['PENDING_PEER_ACCEPTANCE', 'PENDING_MANAGER_APPROVAL'] },
   });
 
@@ -81,7 +132,7 @@ export const proposeShiftSwap = asyncHandler(async (req, res) => {
     requesterId: requesterEmployee._id,
     targetEmployeeId,
     requesterShiftAssignmentId,
-    targetShiftAssignmentId,
+    targetShiftAssignmentId: finalTargetAssignmentId,
     swapDate: parsedSwapDate,
     reason: reason || '',
     status: 'PENDING_PEER_ACCEPTANCE',
@@ -105,13 +156,12 @@ export const proposeShiftSwap = asyncHandler(async (req, res) => {
 });
 
 /**
- * 2. Target Colleague Accepts or Rejects Swap Request
- * PUT /api/v1/shift-swaps/:id/peer-response
+ * 2. Colleague Response
  */
 export const respondToPeerSwapRequest = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user.companyId;
   const { id } = req.params;
-  const { action, comments } = req.body; // action: "ACCEPT" | "REJECT"
+  const { action, comments } = req.body;
 
   if (!['ACCEPT', 'REJECT'].includes(action)) {
     throw new ApiError(400, 'Action must be either ACCEPT or REJECT.');
@@ -140,19 +190,13 @@ export const respondToPeerSwapRequest = asyncHandler(async (req, res) => {
     throw new ApiError(400, `Cannot respond. Request status is already ${swapRequest.status}.`);
   }
 
-  // Check if swap date is in past
   if (new Date(swapRequest.swapDate) < new Date().setHours(0, 0, 0, 0)) {
     swapRequest.status = 'EXPIRED';
     await swapRequest.save();
     throw new ApiError(400, 'This shift swap request has expired because the swap date has passed.');
   }
 
-  if (action === 'ACCEPT') {
-    swapRequest.status = 'PENDING_MANAGER_APPROVAL';
-  } else {
-    swapRequest.status = 'PEER_REJECTED';
-  }
-
+  swapRequest.status = action === 'ACCEPT' ? 'PENDING_MANAGER_APPROVAL' : 'PEER_REJECTED';
   swapRequest.peerActionAt = new Date();
   swapRequest.peerComments = comments || '';
   await swapRequest.save();
@@ -169,13 +213,12 @@ export const respondToPeerSwapRequest = asyncHandler(async (req, res) => {
 });
 
 /**
- * 3. Manager / Shift Incharge Final Approval or Rejection
- * PUT /api/v1/shift-swaps/:id/manager-approval
+ * 3. Manager Approval
  */
 export const reviewSwapRequestByManager = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user.companyId;
   const { id } = req.params;
-  const { action, comments } = req.body; // action: "APPROVE" | "REJECT"
+  const { action, comments } = req.body;
 
   if (!['APPROVE', 'REJECT'].includes(action)) {
     throw new ApiError(400, 'Action must be either APPROVE or REJECT.');
@@ -197,12 +240,6 @@ export const reviewSwapRequestByManager = asyncHandler(async (req, res) => {
     );
   }
 
-  if (new Date(swapRequest.swapDate) < new Date().setHours(0, 0, 0, 0)) {
-    swapRequest.status = 'EXPIRED';
-    await swapRequest.save();
-    throw new ApiError(400, 'This shift swap request has expired because the swap date has passed.');
-  }
-
   if (action === 'REJECT') {
     swapRequest.status = 'MANAGER_REJECTED';
     swapRequest.approvedBy = req.user._id;
@@ -215,20 +252,16 @@ export const reviewSwapRequestByManager = asyncHandler(async (req, res) => {
     );
   }
 
-  // APPROVED: Atomically swap shift templates on both assignment records
+  // Swap shift templates atomically
   const reqAssignment = await ShiftAssignment.findById(swapRequest.requesterShiftAssignmentId);
   const targetAssignment = await ShiftAssignment.findById(swapRequest.targetShiftAssignmentId);
 
-  if (!reqAssignment || !targetAssignment) {
-    throw new ApiError(404, 'One or both shift assignments could not be found.');
+  if (reqAssignment && targetAssignment && reqAssignment._id.toString() !== targetAssignment._id.toString()) {
+    const tempShiftTemplate = reqAssignment.shiftTemplateId;
+    reqAssignment.shiftTemplateId = targetAssignment.shiftTemplateId;
+    targetAssignment.shiftTemplateId = tempShiftTemplate;
+    await Promise.all([reqAssignment.save(), targetAssignment.save()]);
   }
-
-  // Swap the shiftTemplateId between assignments
-  const tempShiftTemplate = reqAssignment.shiftTemplateId;
-  reqAssignment.shiftTemplateId = targetAssignment.shiftTemplateId;
-  targetAssignment.shiftTemplateId = tempShiftTemplate;
-
-  await Promise.all([reqAssignment.save(), targetAssignment.save()]);
 
   swapRequest.status = 'APPROVED';
   swapRequest.approvedBy = req.user._id;
@@ -237,21 +270,16 @@ export const reviewSwapRequestByManager = asyncHandler(async (req, res) => {
   await swapRequest.save();
 
   return res.status(200).json(
-    new ApiResponse(
-      200,
-      swapRequest,
-      'Shift swap approved successfully. Roster assignments have been updated.'
-    )
+    new ApiResponse(200, swapRequest, 'Shift swap approved successfully. Roster updated.')
   );
 });
 
 /**
- * 4. List Shift Swap Requests (ESS & Manager List)
- * GET /api/v1/shift-swaps
+ * 4. List Requests
  */
 export const getShiftSwapRequests = asyncHandler(async (req, res) => {
   const companyId = req.companyId || req.user.companyId;
-  const { status, type } = req.query; // type: 'sent' | 'received' | 'all'
+  const { status, type } = req.query;
 
   const currentEmployee = await Employee.findOne({
     $or: [{ userId: req.user._id }, { email: req.user.email }],
@@ -261,7 +289,7 @@ export const getShiftSwapRequests = asyncHandler(async (req, res) => {
   const query = { companyId };
   if (status) query.status = status;
 
-  const isManagement = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR', 'MANAGER'].includes(req.user.role);
+  const isManagement = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'ADMIN', 'HR', 'MANAGER'].includes(req.user.role);
 
   if (!isManagement || type === 'sent') {
     query.requesterId = currentEmployee?._id;

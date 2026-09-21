@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { PERMISSIONS } from '../../config/permissions.js';
 
-// Base role default permission mapping (Reference matrix)
+// Base role default permission reference matrix
 const BASE_ROLE_PERMISSIONS = {
   SUPER_ADMIN: ['*'],
   COMPANY_ADMIN: ['*'],
@@ -35,46 +35,46 @@ const PERMISSION_CATALOG = [
   {
     category: 'Attendance & Floor Supervision',
     permissions: [
-      { key: PERMISSIONS.ATTENDANCE.READ || 'attendance.read', label: 'View Company Attendance Ledger' },
-      { key: PERMISSIONS.ATTENDANCE.VIEW_TEAM || 'attendance.view_team', label: 'Shift Incharge Live Floor Telemetry' },
-      { key: PERMISSIONS.ATTENDANCE.RECORD || 'attendance.record', label: 'Self Punch-in & Out Capability' },
-      { key: PERMISSIONS.ATTENDANCE.UPDATE || 'attendance.update', label: 'Manual Punch Correction & Override' },
+      { key: PERMISSIONS.ATTENDANCE?.READ || 'attendance.read', label: 'View Company Attendance Ledger' },
+      { key: PERMISSIONS.ATTENDANCE?.VIEW_TEAM || 'attendance.view_team', label: 'Shift Incharge Live Floor Telemetry' },
+      { key: PERMISSIONS.ATTENDANCE?.RECORD || 'attendance.record', label: 'Self Punch-in & Out Capability' },
+      { key: PERMISSIONS.ATTENDANCE?.UPDATE || 'attendance.update', label: 'Manual Punch Correction & Override' },
     ],
   },
   {
     category: 'Leave Governance & Approvals',
     permissions: [
-      { key: PERMISSIONS.LEAVE.READ || 'leave.read', label: 'Audit Company-wide Leave Ledger' },
-      { key: PERMISSIONS.LEAVE.VIEW_TEAM || 'leave.view_team', label: 'View Direct Team Submissions' },
-      { key: PERMISSIONS.LEAVE.APPROVE_MANAGER || 'leave.approve_manager', label: 'Stage 1: Line Manager Approval' },
-      { key: PERMISSIONS.LEAVE.APPROVE_HR || 'leave.approve_hr', label: 'Stage 2: HR Final Clearance & Quota Deduct' },
-      { key: PERMISSIONS.LEAVE.APPLY || 'leave.apply', label: 'Apply for Leave on Behalf of Staff' },
+      { key: PERMISSIONS.LEAVE?.READ || 'leave.read', label: 'Audit Company-wide Leave Ledger' },
+      { key: PERMISSIONS.LEAVE?.VIEW_TEAM || 'leave.view_team', label: 'View Direct Team Submissions' },
+      { key: PERMISSIONS.LEAVE?.APPROVE_MANAGER || 'leave.approve_manager', label: 'Stage 1: Line Manager Approval' },
+      { key: PERMISSIONS.LEAVE?.APPROVE_HR || 'leave.approve_hr', label: 'Stage 2: HR Final Clearance & Quota Deduct' },
+      { key: PERMISSIONS.LEAVE?.APPLY || 'leave.apply', label: 'Apply for Leave on Behalf of Staff' },
     ],
   },
   {
     category: 'Payroll & Financial Engine',
     permissions: [
-      { key: PERMISSIONS.PAYROLL.READ || 'payroll.read', label: 'View Monthly Compensation Summary' },
-      { key: PERMISSIONS.PAYROLL.CREATE || 'payroll.create', label: 'Initialize Monthly Payroll Run' },
-      { key: PERMISSIONS.PAYROLL.RUN || 'payroll.run', label: 'Execute Salary Calculation Orchestrator' },
-      { key: PERMISSIONS.PAYROLL.APPROVE || 'payroll.approve', label: 'Approve & Lock Disbursement Run' },
-      { key: PERMISSIONS.PAYROLL.VIEW_PAYSLIPS || 'payroll.view_payslips', label: 'Inspect Employee Salary Vouchers' },
+      { key: PERMISSIONS.PAYROLL?.READ || 'payroll.read', label: 'View Monthly Compensation Summary' },
+      { key: PERMISSIONS.PAYROLL?.CREATE || 'payroll.create', label: 'Initialize Monthly Payroll Run' },
+      { key: PERMISSIONS.PAYROLL?.RUN || 'payroll.run', label: 'Execute Salary Calculation Orchestrator' },
+      { key: PERMISSIONS.PAYROLL?.APPROVE || 'payroll.approve', label: 'Approve & Lock Disbursement Run' },
+      { key: PERMISSIONS.PAYROLL?.VIEW_PAYSLIPS || 'payroll.view_payslips', label: 'Inspect Employee Salary Vouchers' },
     ],
   },
   {
     category: 'Workforce Directory & Onboarding',
     permissions: [
-      { key: PERMISSIONS.EMPLOYEE.READ || 'employee.read', label: 'Browse Workforce Directory' },
-      { key: PERMISSIONS.EMPLOYEE.CREATE || 'employee.create', label: 'Onboard Staff & Provision Auth Account' },
-      { key: PERMISSIONS.EMPLOYEE.UPDATE || 'employee.update', label: 'Modify Job Profile, Salary & Ranks' },
-      { key: PERMISSIONS.EMPLOYEE.DELETE || 'employee.delete', label: 'Offboard / Deactivate Employee' },
+      { key: PERMISSIONS.EMPLOYEE?.READ || 'employee.read', label: 'Browse Workforce Directory' },
+      { key: PERMISSIONS.EMPLOYEE?.CREATE || 'employee.create', label: 'Onboard Staff & Provision Auth Account' },
+      { key: PERMISSIONS.EMPLOYEE?.UPDATE || 'employee.update', label: 'Modify Job Profile, Salary & Ranks' },
+      { key: PERMISSIONS.EMPLOYEE?.DELETE || 'employee.delete', label: 'Offboard / Deactivate Employee' },
     ],
   },
   {
     category: 'Tenant Governance & Rostering',
     permissions: [
-      { key: PERMISSIONS.COMPANY.READ || 'company.read', label: 'View Departments & Shift Templates' },
-      { key: PERMISSIONS.COMPANY.CONFIGURE || 'company.configure', label: 'Manage Units, Shifts & Roster Policies' },
+      { key: PERMISSIONS.COMPANY?.READ || 'company.read', label: 'View Departments & Shift Templates' },
+      { key: PERMISSIONS.COMPANY?.CONFIGURE || 'company.configure', label: 'Manage Units, Shifts & Roster Policies' },
     ],
   },
 ];
@@ -85,7 +85,7 @@ export default function RoleCapabilityManager() {
   const [jobTitle, setJobTitle] = useState('');
   const [reason, setReason] = useState('Delegated operational authority by Company Admin');
 
-  // Explicit overrides
+  // Override States
   const [grantedPermissions, setGrantedPermissions] = useState(new Set());
   const [removedPermissions, setRemovedPermissions] = useState(new Set());
 
@@ -94,13 +94,13 @@ export default function RoleCapabilityManager() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', text: '' });
 
-  // 1. Fetch Employees and existing overrides
-  const loadData = async () => {
+  // 1. Fetch Employees and existing overrides using exact route: /role-overrides
+  const loadData = async (preserveSelectedId = null) => {
     try {
       setLoading(true);
       const [empRes, overridesRes] = await Promise.allSettled([
         apiClient.get('/employees?limit=200'),
-        apiClient.get('/roles/overrides'),
+        apiClient.get('/role-overrides'),
       ]);
 
       let empList = [];
@@ -122,9 +122,10 @@ export default function RoleCapabilityManager() {
       }
 
       const merged = (empList || []).map((emp) => {
-        const ov = (overrideList || []).find(
-          (o) => (o.employeeId?._id || o.employeeId) === emp._id
-        );
+        const ov = (overrideList || []).find((o) => {
+          const overrideEmpId = o.employeeId?._id || o.employeeId;
+          return overrideEmpId?.toString() === emp._id?.toString();
+        });
         return {
           ...emp,
           override: ov || null,
@@ -132,15 +133,17 @@ export default function RoleCapabilityManager() {
       });
 
       setEmployees(merged);
-      if (merged.length > 0 && !selectedEmployee) {
+
+      const targetId = preserveSelectedId || selectedEmployee?._id;
+      if (targetId) {
+        const found = merged.find((e) => e._id?.toString() === targetId?.toString());
+        if (found) selectUser(found);
+      } else if (merged.length > 0) {
         selectUser(merged[0]);
-      } else if (selectedEmployee) {
-        const refreshed = merged.find((e) => e._id === selectedEmployee._id);
-        if (refreshed) selectUser(refreshed);
       }
     } catch (err) {
       console.error('Data load exception:', err);
-      setFeedback({ type: 'error', text: 'Failed to load employee directory.' });
+      setFeedback({ type: 'error', text: 'Failed to load employee capability directory.' });
     } finally {
       setLoading(false);
     }
@@ -150,13 +153,12 @@ export default function RoleCapabilityManager() {
     loadData();
   }, []);
 
-  // When an employee is selected
+  // When an employee is selected from directory
   const selectUser = (emp) => {
     setSelectedEmployee(emp);
-    setJobTitle(emp.jobTitle || emp.designation || '');
+    setJobTitle(emp.jobTitle || emp.override?.jobTitle || emp.designation || '');
     setReason(emp.override?.reason || 'Delegated operational authority by Company Admin');
 
-    // Load existing overrides
     setGrantedPermissions(new Set(emp.override?.grantedPermissions || []));
     setRemovedPermissions(new Set(emp.override?.removedPermissions || []));
   };
@@ -183,14 +185,12 @@ export default function RoleCapabilityManager() {
     const newRemoved = new Set(removedPermissions);
 
     if (baseHasIt) {
-      // Base role ke paas tha, toggle karne par remove ya unremove hoga
       if (newRemoved.has(permKey)) {
-        newRemoved.delete(permKey); // restore base permission
+        newRemoved.delete(permKey); // restore base
       } else {
-        newRemoved.add(permKey); // revoke base permission
+        newRemoved.add(permKey); // revoke base
       }
     } else {
-      // Base role ke paas nahi tha, grant ya ungrant hoga
       if (newGranted.has(permKey)) {
         newGranted.delete(permKey);
       } else {
@@ -202,7 +202,7 @@ export default function RoleCapabilityManager() {
     setRemovedPermissions(newRemoved);
   };
 
-  // Quick Select / Deselect Group
+  // Toggle whole category group
   const handleToggleGroup = (groupPermissions) => {
     const allKeys = groupPermissions.map((p) => p.key);
     const allCurrentlyActive = allKeys.every((k) => isPermissionActive(k));
@@ -213,11 +213,9 @@ export default function RoleCapabilityManager() {
     allKeys.forEach((key) => {
       const baseHasIt = isBaseInherited(key);
       if (allCurrentlyActive) {
-        // Deselect all
         if (baseHasIt) newRemoved.add(key);
         newGranted.delete(key);
       } else {
-        // Select all
         if (baseHasIt) newRemoved.delete(key);
         else newGranted.add(key);
       }
@@ -227,7 +225,7 @@ export default function RoleCapabilityManager() {
     setRemovedPermissions(newRemoved);
   };
 
-  // Save changes to backend
+  // 2. Save Capabilities to /api/v1/role-overrides/:id with instant state sync
   const handleSaveOverrides = async () => {
     if (!selectedEmployee) return;
 
@@ -235,21 +233,64 @@ export default function RoleCapabilityManager() {
       setSaving(true);
       setFeedback({ type: '', text: '' });
 
+      const grantedArray = Array.from(grantedPermissions);
+      const removedArray = Array.from(removedPermissions);
+      const trimmedTitle = jobTitle.trim();
+      const trimmedReason = reason.trim();
+
       const payload = {
-        grantedPermissions: Array.from(grantedPermissions),
-        removedPermissions: Array.from(removedPermissions),
-        jobTitle: jobTitle.trim(),
-        reason: reason.trim(),
+        grantedPermissions: grantedArray,
+        removedPermissions: removedArray,
+        jobTitle: trimmedTitle,
+        reason: trimmedReason,
       };
 
-      await apiClient.put(`/roles/overrides/${selectedEmployee._id}`, payload);
+      // Exact backend route: PUT /api/v1/role-overrides/:employeeId
+      const res = await apiClient.put(`/role-overrides/${selectedEmployee._id}`, payload);
+      const savedOverride = res.data?.data || payload;
+
+      // Update local state instantly so the directory list & current view reflect immediately
+      setEmployees((prev) =>
+        prev.map((emp) => {
+          if (emp._id === selectedEmployee._id) {
+            return {
+              ...emp,
+              jobTitle: trimmedTitle || emp.jobTitle || emp.designation,
+              designation: trimmedTitle || emp.designation,
+              override: {
+                ...emp.override,
+                ...savedOverride,
+                grantedPermissions: grantedArray,
+                removedPermissions: removedArray,
+                jobTitle: trimmedTitle,
+                reason: trimmedReason,
+              },
+            };
+          }
+          return emp;
+        })
+      );
+
+      setSelectedEmployee((prev) => ({
+        ...prev,
+        jobTitle: trimmedTitle || prev.jobTitle || prev.designation,
+        override: {
+          ...prev?.override,
+          ...savedOverride,
+          grantedPermissions: grantedArray,
+          removedPermissions: removedArray,
+          jobTitle: trimmedTitle,
+          reason: trimmedReason,
+        },
+      }));
 
       setFeedback({
         type: 'success',
-        text: `Powers saved successfully for ${selectedEmployee.firstName} ${selectedEmployee.lastName}.`,
+        text: `Powers saved successfully for ${selectedEmployee.firstName} ${selectedEmployee.lastName}! (${grantedArray.length} Granted, ${removedArray.length} Revoked)`,
       });
 
-      loadData();
+      // Background re-fetch to ensure database synchronization
+      loadData(selectedEmployee._id);
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -260,7 +301,37 @@ export default function RoleCapabilityManager() {
     }
   };
 
-  // Filter employees
+  // Reset to default base role permissions (DELETE /api/v1/role-overrides/:id)
+  const handleResetDefaults = async () => {
+    if (!selectedEmployee) return;
+    if (!window.confirm(`Reset all custom capabilities for ${selectedEmployee.firstName}? Base role defaults will be restored.`)) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await apiClient.delete(`/role-overrides/${selectedEmployee._id}`);
+
+      setGrantedPermissions(new Set());
+      setRemovedPermissions(new Set());
+
+      setFeedback({
+        type: 'success',
+        text: `Custom capabilities removed. ${selectedEmployee.firstName} restored to default role permissions.`,
+      });
+
+      loadData(selectedEmployee._id);
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err.response?.data?.message || 'Failed to reset capabilities.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Search filter
   const filteredEmployees = useMemo(() => {
     if (!searchQuery.trim()) return employees;
     const q = searchQuery.toLowerCase();
@@ -270,13 +341,14 @@ export default function RoleCapabilityManager() {
         e.lastName?.toLowerCase().includes(q) ||
         e.email?.toLowerCase().includes(q) ||
         e.designation?.toLowerCase().includes(q) ||
+        e.jobTitle?.toLowerCase().includes(q) ||
         e.employeeCode?.toLowerCase().includes(q)
     );
   }, [employees, searchQuery]);
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto select-none font-sans text-[#16233B] pb-24">
-      {/* Notifications */}
+      {/* Feedback Banner */}
       {feedback.text && (
         <div
           className={`p-3 rounded text-xs font-mono flex items-center justify-between ${
@@ -331,7 +403,7 @@ export default function RoleCapabilityManager() {
               </div>
             ) : (
               filteredEmployees.map((emp) => {
-                const isSelected = selectedEmployee?._id === emp._id;
+                const isSelected = selectedEmployee?._id?.toString() === emp._id?.toString();
                 const grantedCount = emp.override?.grantedPermissions?.length || 0;
                 const revokedCount = emp.override?.removedPermissions?.length || 0;
 
@@ -352,7 +424,7 @@ export default function RoleCapabilityManager() {
                       <div className="flex items-center gap-1">
                         {grantedCount > 0 && (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 bg-[#EBF7F0] text-[#1E7E34] border border-[#C6EAD3] rounded font-bold">
-                            +{grantedCount}
+                            +{grantedCount} Powers
                           </span>
                         )}
                         {revokedCount > 0 && (
@@ -362,10 +434,10 @@ export default function RoleCapabilityManager() {
                         )}
                       </div>
                     </div>
-                    <div className="text-[11px] text-[#728294]">{emp.email}</div>
+                    <div className="text-[11px] text-[#728294] truncate">{emp.email}</div>
                     <div className="text-[10px] font-mono text-[#8C5D17] mt-1 flex justify-between">
-                      <span>{emp.jobTitle || emp.designation || 'Staff Member'}</span>
-                      <span className="text-[#728294]">{emp.role || 'EMPLOYEE'}</span>
+                      <span className="truncate">{emp.jobTitle || emp.override?.jobTitle || emp.designation || 'Staff'}</span>
+                      <span className="text-[#728294] shrink-0">{emp.role || 'EMPLOYEE'}</span>
                     </div>
                   </div>
                 );
@@ -378,7 +450,7 @@ export default function RoleCapabilityManager() {
         <div className="lg:col-span-8 bg-white rounded-lg border border-[#E3DED4] p-6 shadow-xs space-y-6">
           {selectedEmployee ? (
             <>
-              {/* Selected User Header & Status Ribbon */}
+              {/* Selected User Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#F4F1EA] gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -402,14 +474,26 @@ export default function RoleCapabilityManager() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleSaveOverrides}
-                  disabled={saving}
-                  className="px-4 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white text-xs font-mono font-bold rounded shadow-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
-                >
-                  {saving ? 'SAVING POWERS...' : 'SAVE CAPABILITIES'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {(grantedPermissions.size > 0 || removedPermissions.size > 0) && (
+                    <button
+                      type="button"
+                      onClick={handleResetDefaults}
+                      disabled={saving}
+                      className="px-3 py-2 border border-[#D8D3C7] hover:bg-[#FAF8F5] text-[#728294] text-xs font-mono rounded cursor-pointer transition-colors"
+                    >
+                      Reset Defaults
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSaveOverrides}
+                    disabled={saving}
+                    className="px-4 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white text-xs font-mono font-bold rounded shadow-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? 'SAVING POWERS...' : 'SAVE CAPABILITIES'}
+                  </button>
+                </div>
               </div>
 
               {/* Title & Reason Customization */}

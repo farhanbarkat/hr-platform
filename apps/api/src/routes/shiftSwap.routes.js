@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  getEligiblePeersAndMyShifts,
   proposeShiftSwap,
   respondToPeerSwapRequest,
   reviewSwapRequestByManager,
@@ -14,17 +15,18 @@ const router = Router();
 router.use(verifyJWT);
 router.use(tenantMiddleware);
 
-// 1. Propose & View Swaps (Koi bhi employee kar sakta hai)
+// 0. Eligible peers & logged-in employee shifts
+router.get('/peers', getEligiblePeersAndMyShifts);
+
+// 1. Propose & View Swaps
 router.route('/')
   .get(getShiftSwapRequests)
   .post(proposeShiftSwap);
 
-// 2. Colleague Peer Response (Sirf target employee)
+// 2. Colleague Peer Response
 router.put('/:id/peer-response', respondToPeerSwapRequest);
 
-// 3. Manager / Incharge / Custom Role Final Approval
-// ✅ Works for ANY Base Role (HR, Manager, Admin) AND ANY Custom Role (HOD, Shift Incharge, Supervisor)
-// Jo bhi role 'attendance.update' permission rakhta hoga, wo approve kar sakega!
+// 3. Manager / Shift Incharge Final Approval
 router.put(
   '/:id/manager-approval',
   authorizePermission(PERMISSIONS.ATTENDANCE.UPDATE),

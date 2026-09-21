@@ -4,6 +4,8 @@ import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import ApplyLeaveModal from '../leave/ApplyLeaveModal.jsx';
 import AttendancePunchCard from '../attendance/AttendancePunchCard.jsx';
+import ProposeShiftSwapModal from './ProposeShiftSwapModal.jsx';
+import ShiftSwapDesk from '../shifts/ShiftSwapDesk.jsx';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -13,6 +15,10 @@ export default function EmployeeDashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [error, setError] = useState(null);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+
+  // 🔄 Shift Swap State Management
+  const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
+  const [swapRefreshKey, setSwapRefreshKey] = useState(0);
 
   // 🏦 Loan Application & Telemetry State
   const [myLoans, setMyLoans] = useState([]);
@@ -26,7 +32,7 @@ export default function EmployeeDashboard() {
   const [loanFeedback, setLoanFeedback] = useState(null);
 
   // 1. Fetch Core Dashboard Telemetry
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -42,7 +48,7 @@ export default function EmployeeDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 2. Fetch Employee Personal Loans (TICKET-029)
   const fetchMyLoans = useCallback(async () => {
@@ -57,7 +63,7 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     fetchDashboard();
     fetchMyLoans();
-  }, [fetchMyLoans]);
+  }, [fetchDashboard, fetchMyLoans]);
 
   // 3. Handle Loan Submission directly from ESS
   const handleApplyLoan = async (e) => {
@@ -117,7 +123,11 @@ export default function EmployeeDashboard() {
 
   const { profile, attendance, leaves, payslips, tasks } = dashboardData || {};
 
-  // Find active loan if available
+  // Normalize leave balances
+  const leaveBalances = Array.isArray(leaves?.balances) ? leaves.balances : [];
+  const recentLeaveRequests = Array.isArray(leaves?.recentRequests) ? leaves.recentRequests : [];
+
+  // Loan metrics
   const activeLoan = myLoans.find((l) => ['APPROVED', 'APPLIED'].includes(l.status));
   const activePrincipal = parseFloat(activeLoan?.principal?.toString() || 0);
   const activeBalance = parseFloat(activeLoan?.remainingBalance?.toString() || 0);
@@ -126,7 +136,7 @@ export default function EmployeeDashboard() {
   const repaymentPercent = activePrincipal > 0 ? Math.min(100, Math.round((activePaid / activePrincipal) * 100)) : 0;
 
   return (
-    <div className="space-y-6 max-w-[1300px] mx-auto select-none font-sans text-[#16233B] p-6 pb-16">
+    <div className="space-y-6 max-w-[1300px] mx-auto select-none font-sans text-[#16233B] p-6 pb-20">
       
       {/* 1. Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-[#E3DED4] gap-3">
@@ -175,40 +185,68 @@ export default function EmployeeDashboard() {
           <AttendancePunchCard onRecordUpdated={fetchDashboard} />
         </div>
 
-        {/* Current Month Attendance Telemetry */}
+        {/* Current Month Attendance Telemetry with Assigned Shift Callout */}
         <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs lg:col-span-8 flex flex-col justify-between min-h-[290px]">
           <div>
             <div className="flex justify-between items-center">
               <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
-                ATTENDANCE VELOCITY
+                ATTENDANCE VELOCITY & ACTIVE SHIFT
               </span>
-              <span className="text-[10px] font-mono text-[#8C5D17] bg-[#FAF4E8] px-2 py-0.5 border border-[#E3DED4] rounded">
-                Current Month
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsSwapModalOpen(true)}
+                  className="text-[10px] font-mono font-bold text-[#8C5D17] hover:text-[#734B12] bg-[#FAF4E8] hover:bg-[#FAF0D9] px-2.5 py-1 border border-[#E3DED4] rounded hover:border-[#8C5D17] transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                >
+                  ⇄ SELECT & SWAP SHIFT
+                </button>
+                <span className="text-[10px] font-mono text-[#8C5D17] bg-[#FAF4E8] px-2 py-1 border border-[#E3DED4] rounded">
+                  Current Month
+                </span>
+              </div>
             </div>
-            <h3 className="text-sm font-bold text-[#16233B] mt-1">Monthly Shift Summary</h3>
+
+            {/* Assigned Shift Strip */}
+            <div className="mt-3 p-3 bg-[#FAF8F5] border border-[#E3DED4] rounded-md flex justify-between items-center">
+              <div>
+                <span className="text-[9.5px] font-mono text-[#728294] uppercase block">
+                  YOUR CURRENT SCHEDULED ROSTER
+                </span>
+                <span className="text-xs font-bold text-[#16233B] mt-0.5 block">
+                  {dashboardData?.profile?.currentShift?.name || 'Standard Production Shift'}
+                </span>
+              </div>
+              <div className="text-right font-mono">
+                <span className="text-xs font-bold text-[#8C5D17]">
+                  {dashboardData?.profile?.currentShift?.startTime || '09:00'} &rarr; {dashboardData?.profile?.currentShift?.endTime || '18:00'}
+                </span>
+                <span className="block text-[9.5px] text-[#728294]">
+                  Grace Window: {dashboardData?.profile?.currentShift?.gracePeriod || 15} mins
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center my-4">
-            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+          {/* Counters */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center my-3">
+            <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
               <div className="text-xl font-bold font-mono text-[#1E7E34]">{attendance?.presentDays ?? 0}</div>
               <div className="text-[9px] font-mono text-[#728294] mt-0.5">PRESENT</div>
             </div>
-            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+            <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
               <div className="text-xl font-bold font-mono text-[#B83E28]">{attendance?.absentDays ?? 0}</div>
               <div className="text-[9px] font-mono text-[#728294] mt-0.5">ABSENT</div>
             </div>
-            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+            <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
               <div className="text-xl font-bold font-mono text-[#8C5D17]">{attendance?.lateDays ?? 0}</div>
               <div className="text-[9px] font-mono text-[#728294] mt-0.5">LATE DAYS</div>
             </div>
-            <div className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+            <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
               <div className="text-xl font-bold font-mono text-[#16233B]">{attendance?.totalLoggedDays ?? 0}</div>
               <div className="text-[9px] font-mono text-[#728294] mt-0.5">LOGGED DAYS</div>
             </div>
           </div>
 
-          <div className="text-[11px] text-[#728294] flex justify-between pt-3 border-t border-[#F4F1EA]">
+          <div className="text-[11px] text-[#728294] flex justify-between pt-2.5 border-t border-[#F4F1EA]">
             <span>Half Days: <b className="font-mono text-[#16233B]">{attendance?.halfDays ?? 0}</b></span>
             <span className="font-mono text-[10px] text-[#1E7E34]">Telemetry Live Synced ✓</span>
           </div>
@@ -216,7 +254,162 @@ export default function EmployeeDashboard() {
 
       </div>
 
-      {/* 3. Financial Advances & Loans Strip (TICKET-029 / TICKET-030) */}
+      {/* 3. Leave Balances (Annual Quota) & Operational Tasks */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        
+        {/* Leave Balances Quota & Apply Leave */}
+        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
+                ANNUAL QUOTA // LEAVE OPERATIONS
+              </span>
+              <button
+                onClick={() => setIsLeaveModalOpen(true)}
+                className="text-[10px] font-mono font-bold text-white bg-[#8C5D17] hover:bg-[#784F14] px-3 py-1 rounded transition-all cursor-pointer shadow-xs flex items-center gap-1"
+              >
+                + APPLY FOR LEAVE
+              </button>
+            </div>
+            <h3 className="text-sm font-bold text-[#16233B] mt-1">Available Leave Entitlements</h3>
+
+            {/* Leave Cards Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
+              {leaveBalances.length === 0 ? (
+                <>
+                  <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+                    <div className="text-[10px] font-mono uppercase text-[#728294] truncate">Annual Leave</div>
+                    <div className="text-lg font-bold font-mono text-[#8C5D17] mt-0.5">
+                      -- <span className="text-[9px] text-[#728294] font-normal">days</span>
+                    </div>
+                    <div className="text-[9px] text-[#8C9BAE] font-mono mt-0.5">Policy Active</div>
+                  </div>
+                  <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+                    <div className="text-[10px] font-mono uppercase text-[#728294] truncate">Casual Leave</div>
+                    <div className="text-lg font-bold font-mono text-[#8C5D17] mt-0.5">
+                      -- <span className="text-[9px] text-[#728294] font-normal">days</span>
+                    </div>
+                    <div className="text-[9px] text-[#8C9BAE] font-mono mt-0.5">Policy Active</div>
+                  </div>
+                  <div className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+                    <div className="text-[10px] font-mono uppercase text-[#728294] truncate">Sick Leave</div>
+                    <div className="text-lg font-bold font-mono text-[#8C5D17] mt-0.5">
+                      -- <span className="text-[9px] text-[#728294] font-normal">days</span>
+                    </div>
+                    <div className="text-[9px] text-[#8C9BAE] font-mono mt-0.5">Policy Active</div>
+                  </div>
+                </>
+              ) : (
+                leaveBalances.map((b, idx) => (
+                  <div key={idx} className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
+                    <div className="text-[10px] font-mono uppercase text-[#728294] truncate">
+                      {b.leaveType || 'Annual'}
+                    </div>
+                    <div className="text-lg font-bold font-mono text-[#8C5D17] mt-0.5">
+                      {b.remaining ?? 0} <span className="text-[9px] text-[#728294] font-normal">days</span>
+                    </div>
+                    <div className="text-[9px] text-[#8C9BAE] font-mono mt-0.5">
+                      Used: {b.used ?? 0} / {b.totalAllocated ?? 0}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Recent Applications Mini-List */}
+          <div className="mt-4 pt-3 border-t border-[#F4F1EA]">
+            <span className="text-[9px] font-mono uppercase text-[#728294] font-bold block mb-1.5">
+              Recent Leave Applications
+            </span>
+            {recentLeaveRequests.length === 0 ? (
+              <p className="text-[11px] font-mono text-[#728294] py-1">
+                No leave requests filed recently.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {recentLeaveRequests.map((req) => (
+                  <div key={req._id} className="text-xs p-2 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-[#16233B]">{req.leaveType}</span>
+                      <span className="text-[#728294] ml-2 font-mono text-[10px]">
+                        {new Date(req.startDate).toLocaleDateString()} ({req.totalDays}d)
+                      </span>
+                    </div>
+                    <span className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                      req.status === 'APPROVED' ? 'bg-[#EBF7F0] text-[#1E7E34]' :
+                      req.status === 'REJECTED' ? 'bg-[#FDEEEB] text-[#B83E28]' :
+                      'bg-[#FAF4E8] text-[#8C5D17]'
+                    }`}>
+                      {req.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Assigned Active Tasks */}
+        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
+                OPERATIONAL ASSIGNMENTS
+              </span>
+              {tasks?.overdueCount > 0 && (
+                <span className="text-[9px] font-mono bg-[#FDEEEB] text-[#B83E28] px-2 py-0.5 rounded border border-[#F5C2BA] font-bold">
+                  {tasks.overdueCount} Overdue
+                </span>
+              )}
+            </div>
+            <h3 className="text-sm font-bold text-[#16233B] mt-1">Pending Tasks & Deliverables</h3>
+
+            <div className="space-y-2 mt-3">
+              {!tasks?.items || tasks.items.length === 0 ? (
+                <div className="py-8 text-center font-mono text-xs text-[#728294]">
+                  All assigned operational tasks completed.
+                </div>
+              ) : (
+                tasks.items.map((task) => (
+                  <div key={task._id} className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-start">
+                    <div className="pr-2">
+                      <div className="font-bold text-xs text-[#16233B]">{task.title}</div>
+                      {task.description && (
+                        <div className="text-[11px] text-[#728294] line-clamp-1 mt-0.5">{task.description}</div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase font-semibold ${
+                        task.priority === 'HIGH' ? 'bg-[#FDEEEB] text-[#B83E28]' : 'bg-white border border-[#E3DED4] text-[#728294]'
+                      }`}>
+                        {task.priority || 'NORMAL'}
+                      </span>
+                      {task.deadline && (
+                        <div className={`text-[9px] font-mono mt-1 ${task.isOverdue ? 'text-[#B83E28] font-bold' : 'text-[#728294]'}`}>
+                          Due: {new Date(task.deadline).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="text-[11px] font-mono text-[#728294] pt-3 border-t border-[#F4F1EA]">
+            Active Tasks: <b className="text-[#16233B]">{tasks?.activeCount ?? 0}</b>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 4. Shift Exchange & Peer Roster Desk (Live Colleague Requests) */}
+      <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs">
+        <ShiftSwapDesk key={swapRefreshKey} isManagerView={false} />
+      </div>
+
+      {/* 5. Financial Advances & Loans Strip */}
       <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#F4F1EA] gap-3">
           <div>
@@ -272,7 +465,6 @@ export default function EmployeeDashboard() {
               </div>
             </div>
 
-            {/* Repayment Progress for Approved Loan */}
             {activeLoan.status === 'APPROVED' && (
               <div className="pt-2 border-t border-[#E3DED4]/60">
                 <div className="flex justify-between text-[10.5px] font-mono text-[#728294] mb-1">
@@ -295,131 +487,7 @@ export default function EmployeeDashboard() {
         )}
       </div>
 
-      {/* 4. Leave Balances & Active Tasks */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        
-        {/* Leave Balances Quota */}
-        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
-                ANNUAL QUOTA
-              </span>
-              <button
-                onClick={() => setIsLeaveModalOpen(true)}
-                className="text-[10px] font-mono font-bold text-[#8C5D17] hover:text-[#734B12] bg-[#FAF4E8] px-2 py-0.5 border border-[#E3DED4] rounded hover:border-[#8C5D17] transition-all cursor-pointer"
-              >
-                + APPLY FOR LEAVE
-              </button>
-            </div>
-            <h3 className="text-sm font-bold text-[#16233B] mt-1">Available Leave Entitlements</h3>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
-              {leaves?.balances?.length === 0 ? (
-                <div className="col-span-full py-4 text-center font-mono text-xs text-[#728294]">
-                  No leave quotas allocated for this fiscal year.
-                </div>
-              ) : (
-                leaves?.balances?.map((b, idx) => (
-                  <div key={idx} className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded">
-                    <div className="text-[10px] font-mono uppercase text-[#728294] truncate">
-                      {b.leaveType || 'Annual'}
-                    </div>
-                    <div className="text-lg font-bold font-mono text-[#8C5D17] mt-0.5">
-                      {b.remaining ?? 0} <span className="text-[9px] text-[#728294] font-normal">days</span>
-                    </div>
-                    <div className="text-[9px] text-[#8C9BAE] font-mono mt-0.5">
-                      Used: {b.used ?? 0} / {b.totalAllocated ?? 0}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {leaves?.recentRequests?.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-[#F4F1EA]">
-              <span className="text-[9px] font-mono uppercase text-[#728294] font-bold block mb-1.5">
-                Recent Leave Applications
-              </span>
-              <div className="space-y-1.5">
-                {leaves.recentRequests.map((req) => (
-                  <div key={req._id} className="text-xs p-2 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-center">
-                    <div>
-                      <span className="font-bold text-[#16233B]">{req.leaveType}</span>
-                      <span className="text-[#728294] ml-2 font-mono text-[10px]">
-                        {new Date(req.startDate).toLocaleDateString()} ({req.totalDays}d)
-                      </span>
-                    </div>
-                    <span className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
-                      req.status === 'APPROVED' ? 'bg-[#EBF7F0] text-[#1E7E34]' :
-                      req.status === 'REJECTED' ? 'bg-[#FDEEEB] text-[#B83E28]' :
-                      'bg-[#FAF4E8] text-[#8C5D17]'
-                    }`}>
-                      {req.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Assigned Active Tasks */}
-        <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
-                OPERATIONAL ASSIGNMENTS
-              </span>
-              {tasks?.overdueCount > 0 && (
-                <span className="text-[9px] font-mono bg-[#FDEEEB] text-[#B83E28] px-2 py-0.5 rounded border border-[#F5C2BA] font-bold">
-                  {tasks.overdueCount} Overdue
-                </span>
-              )}
-            </div>
-            <h3 className="text-sm font-bold text-[#16233B] mt-1">Pending Tasks & Deliverables</h3>
-
-            <div className="space-y-2 mt-3">
-              {tasks?.items?.length === 0 ? (
-                <div className="py-8 text-center font-mono text-xs text-[#728294]">
-                  All assigned operational tasks completed.
-                </div>
-              ) : (
-                tasks?.items?.map((task) => (
-                  <div key={task._id} className="p-2.5 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-start">
-                    <div className="pr-2">
-                      <div className="font-bold text-xs text-[#16233B]">{task.title}</div>
-                      {task.description && (
-                        <div className="text-[11px] text-[#728294] line-clamp-1 mt-0.5">{task.description}</div>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase font-semibold ${
-                        task.priority === 'HIGH' ? 'bg-[#FDEEEB] text-[#B83E28]' : 'bg-white border border-[#E3DED4] text-[#728294]'
-                      }`}>
-                        {task.priority || 'NORMAL'}
-                      </span>
-                      {task.deadline && (
-                        <div className={`text-[9px] font-mono mt-1 ${task.isOverdue ? 'text-[#B83E28] font-bold' : 'text-[#728294]'}`}>
-                          Due: {new Date(task.deadline).toLocaleDateString()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="text-[11px] font-mono text-[#728294] pt-3 border-t border-[#F4F1EA]">
-            Active Tasks: <b className="text-[#16233B]">{tasks?.activeCount ?? 0}</b>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 5. Latest Payslips Drawer */}
+      {/* 6. Latest Payslips Drawer */}
       <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-2xs">
         <span className="text-[9px] font-mono uppercase tracking-wider text-[#728294] font-bold">
           COMPENSATION ARCHIVE
@@ -427,12 +495,12 @@ export default function EmployeeDashboard() {
         <h3 className="text-sm font-bold text-[#16233B] mt-1">Recent Payslips & Disbursements</h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-          {payslips?.length === 0 ? (
+          {!payslips || payslips.length === 0 ? (
             <div className="col-span-full py-4 text-center font-mono text-xs text-[#728294]">
               No finalized payslips available for the recent pay cycles.
             </div>
           ) : (
-            payslips?.map((slip) => (
+            payslips.map((slip) => (
               <div key={slip._id} className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-center">
                 <div>
                   <div className="text-xs font-bold text-[#16233B]">
@@ -451,11 +519,20 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* 6. Modals */}
+      {/* 7. Modals Integration */}
       <ApplyLeaveModal
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
         onSuccess={fetchDashboard}
+      />
+
+      {/* Shift Swap Proposal Modal */}
+      <ProposeShiftSwapModal
+        isOpen={isSwapModalOpen}
+        onClose={() => setIsSwapModalOpen(false)}
+        onSwapProposed={() => {
+          setSwapRefreshKey((prev) => prev + 1);
+        }}
       />
 
       {/* Loan Application Modal */}
@@ -500,7 +577,6 @@ export default function EmployeeDashboard() {
                 </select>
               </div>
 
-              {/* Live EMI Calculation preview */}
               {loanForm.principal && (
                 <div className="p-3 bg-[#FAF8F5] border border-[#E3DED4] rounded text-xs font-mono">
                   <span className="text-[#728294] block text-[9.5px]">ESTIMATED MONTHLY DEDUCTION:</span>
