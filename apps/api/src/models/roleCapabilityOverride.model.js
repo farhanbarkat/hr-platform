@@ -14,18 +14,30 @@ const roleCapabilityOverrideSchema = new Schema(
       required: true,
       index: true,
     },
-    // Only permissions to REMOVE from their base role permissions
+    // ✅ Extra granted powers
+    grantedPermissions: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    // ✅ Restricted powers
     removedPermissions: [
       {
         type: String,
         trim: true,
-        required: true,
       },
     ],
+    jobTitle: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     reason: {
       type: String,
-      required: [true, 'A reason is required explaining why permissions are being restricted.'],
+      required: [true, 'A reason is required explaining capability changes.'],
       trim: true,
+      default: 'Delegated operational authority by Company Admin',
     },
     updatedBy: {
       type: Schema.Types.ObjectId,
@@ -38,7 +50,7 @@ const roleCapabilityOverrideSchema = new Schema(
   }
 );
 
-// Ensure one override record per employee per company
+// One override record per employee per company
 roleCapabilityOverrideSchema.index({ companyId: 1, employeeId: 1 }, { unique: true });
 
 export const RoleCapabilityOverride = mongoose.model(
