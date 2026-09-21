@@ -87,6 +87,21 @@ const Icons = {
       <polyline points="17 11 19 13 23 9" />
     </svg>
   ),
+  Tasks: () => (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
   Chat: () => (
     <svg
       width="14"
@@ -133,6 +148,41 @@ const Icons = {
       <line x1="2" y1="10" x2="22" y2="10" />
     </svg>
   ),
+
+  Team: () => (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+
+  Loan: () => (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+      <path d="M12 6V4m0 16v-2" />
+    </svg>
+  ),
   Finance: () => (
     <svg
       width="14"
@@ -148,6 +198,23 @@ const Icons = {
       <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </svg>
   ),
+
+  Tax: () => (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M7 15h0M2 9.5h20M7 7h10" />
+    </svg>
+  ),
+
   Ledger: () => (
     <svg
       width="14"
@@ -195,24 +262,6 @@ const Icons = {
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   ),
-
-  Loan: () => (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
-      <path d="M12 6V4m0 16v-2" />
-    </svg>
-  ),
-
   SignOut: () => (
     <svg
       width="13"
@@ -232,8 +281,7 @@ const Icons = {
 };
 
 export default function AppSidebar() {
-  const { user, logout, hasPermission, hasAnyPermission, isSuperAdmin } =
-    useAuth();
+  const { user, logout, hasPermission, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
 
   const isCompanyAdmin =
@@ -265,6 +313,14 @@ export default function AppSidebar() {
         isCompanyAdmin ||
         hasPermission(PERMISSIONS.EMPLOYEE.READ),
     },
+
+    {
+      label: 'Squads & Teams',
+      path: '/company-admin/teams',
+      Icon: Icons.Team,
+      isAccessible: true,
+    },
+
     {
       label: 'Departments & Shifts',
       path: '/company-admin/departments',
@@ -295,6 +351,12 @@ export default function AppSidebar() {
         hasPermission(PERMISSIONS.ATTENDANCE.READ),
     },
     {
+      label: 'Task & Workspace',
+      path: '/company-admin/tasks',
+      Icon: Icons.Tasks,
+      isAccessible: true,
+    },
+    {
       label: 'Direct Chat Desk',
       path: '/company-admin/communication',
       Icon: Icons.Chat,
@@ -307,12 +369,9 @@ export default function AppSidebar() {
       isAccessible:
         isSuperAdmin ||
         isCompanyAdmin ||
-        hasAnyPermission([
-          PERMISSIONS.LEAVE.VIEW_TEAM,
-          PERMISSIONS.LEAVE.READ,
-          PERMISSIONS.LEAVE.APPROVE_MANAGER,
-          PERMISSIONS.LEAVE.APPROVE_HR,
-        ]),
+        user?.role === 'HR' ||
+        user?.role === 'MANAGER' ||
+        hasPermission(PERMISSIONS.LEAVE.READ),
     },
     {
       label: 'Payroll & Compensation',
@@ -323,7 +382,6 @@ export default function AppSidebar() {
         isCompanyAdmin ||
         hasPermission(PERMISSIONS.PAYROLL.READ),
     },
-
     {
       label: 'Loan & Advances',
       path: '/company-admin/loans',
@@ -360,6 +418,14 @@ export default function AppSidebar() {
         isCompanyAdmin ||
         hasPermission(PERMISSIONS.COMPANY.CONFIGURE),
     },
+
+    {
+      label: 'Income Tax & Presets',
+      path: '/company-admin/tax',
+      Icon: Icons.Tax,
+      isAccessible: true,
+    },
+
     {
       label: 'Organization Settings',
       path: '/company-admin/settings',
@@ -367,11 +433,7 @@ export default function AppSidebar() {
       isAccessible:
         isSuperAdmin ||
         isCompanyAdmin ||
-        hasAnyPermission([
-          PERMISSIONS.SETTINGS.READ,
-          PERMISSIONS.COMPANY.CONFIGURE,
-          PERMISSIONS.SETTINGS.UPDATE,
-        ]),
+        hasPermission(PERMISSIONS.SETTINGS.READ),
     },
   ];
 

@@ -8,7 +8,7 @@ dotenv.config({ path: './.env' });
 
 const seedSuperAdmin = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI;
+    const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://farhanbarkat33_db_user:Farhan.123@cluster0.haqsjjk.mongodb.net/?appName=Cluster0';
     if (!mongoUri) throw new Error('MONGODB_URI missing');
 
     console.log('⏳ Connecting to Database...');
@@ -28,7 +28,7 @@ const seedSuperAdmin = async () => {
     }
 
     const superAdminEmail = (process.env.SUPERADMIN_EMAIL || 'superadmin@hrplatform.com').toLowerCase();
-    const plainPassword = 'SuperAdmin123!'; // Default password for seeding; should be changed after first login
+    const plainPassword = 'Farhan.123@#-=[]'; // Default password for seeding; should be changed after first login
 
     // Hash manually with salt factor 10
     const salt = await bcrypt.genSalt(10);

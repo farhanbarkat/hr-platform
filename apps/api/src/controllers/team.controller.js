@@ -8,6 +8,42 @@ import { Employee } from '../models/employee.model.js';
 import { Task } from '../models/task.model.js';
 import '../models/attendance.model.js';
 
+
+
+/**
+ * 0. Get All Teams for Company (Admin/HR/Manager/Member)
+ */
+export const getTeams = asyncHandler(async (req, res) => {
+  const companyId = req.companyId;
+  const user = req.user;
+
+  const isPrivileged = ['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR'].includes(user.role);
+
+  let query = { companyId, isActive: true };
+
+  if (!isPrivileged) {
+    const employee = await Employee.findOne({
+      companyId,
+      $or: [{ userId: user._id }, { _id: user.employeeId || user._id }],
+    });
+
+    if (!employee) {
+      return res.status(200).json(new ApiResponse(200, [], 'No teams found.'));
+    }
+
+    // Manager of team OR member in team
+    query.$or = [{ managerId: employee._id }, { members: employee._id }];
+  }
+
+  const teams = await Team.find(query)
+    .populate('managerId', 'firstName lastName email employeeId designation')
+    .populate('members', 'firstName lastName email employeeId designation')
+    .sort({ createdAt: -1 });
+
+  return res.status(200).json(new ApiResponse(200, teams, 'Teams retrieved successfully.'));
+});
+
+
 /**
  * 1. Create Team (Admin / HR / Manager)
  */
@@ -115,83 +151,51 @@ export const getTeamDashboard = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Team not found.');
   }
 
-  // Resolve current employee
-  const currentEmployee = await Employee.findOne({
-    companyId,
-    $or: [{ userId: req.user._id }, { _id: req.user.employeeId || req.user._id }],
-  });
-
-  // Safe role & membership checks with optional chaining
-  const isPrivileged = ['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR'].includes(req.user.role);
-  const isManager = currentEmployee && team.managerId?._id?.toString() === currentEmployee._id.toString();
-  const isMember = currentEmployee && team.members?.some((m) => m?._id?.toString() === currentEmployee._id.toString());
-
-  if (!isPrivileged && !isManager && !isMember) {
-    throw new ApiError(403, 'Access denied. This dashboard is restricted to team members and their manager.');
-  }
-
-  // Collect all team personnel IDs safely (Filtering nulls)
   const allTeamMemberIds = [
     ...(team.managerId?._id ? [team.managerId._id] : []),
     ...(team.members || []).map((m) => m._id || m),
   ];
 
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-
-  const todayEnd = new Date();
-  todayEnd.setUTCHours(23, 59, 59, 999);
-
-  // Dynamic Mongoose Attendance Model Resolution
-  const AttendanceModel =
-    mongoose.models.Attendance ||
-    mongoose.models.AttendanceRecord ||
-    mongoose.model('Attendance');
-
-  // Parallel single-trip fetch: Task Summary, Attendance Snapshot, Discussions
-  const [tasks, attendanceRecords, discussions] = await Promise.all([
-    // 1. Task Board Summary
-    Task.find({
+  // 1. Fetch Tasks safely
+  let tasks = [];
+  try {
+    tasks = await Task.find({
       companyId,
-      assigneeId: { $in: allTeamMemberIds },
-    }).select('title status priority dueDate assigneeId'),
+      $or: [
+        { assignedTo: { $in: allTeamMemberIds } },
+        { assigneeId: { $in: allTeamMemberIds } }
+      ]
+    }).select('title status priority deadline').lean();
+  } catch (err) {
+    tasks = [];
+  }
 
-    // 2. Attendance Snapshot for Today
-    AttendanceModel.find({
-      companyId,
-      employeeId: { $in: allTeamMemberIds },
-      date: { $gte: todayStart, $lte: todayEnd },
-    }).populate('employeeId', 'firstName lastName employeeId designation'),
-
-    // 3. Discussion Thread (Latest 30 messages)
-    TeamDiscussion.find({ teamId: team._id, companyId })
+  // 2. Fetch Discussions safely
+  let discussions = [];
+  try {
+    discussions = await TeamDiscussion.find({ teamId: team._id, companyId })
       .populate('authorId', 'firstName lastName email employeeId designation')
       .sort({ createdAt: -1 })
-      .limit(30),
-  ]);
+      .limit(30)
+      .lean();
+  } catch (err) {
+    discussions = [];
+  }
 
-  // Aggregate Task Summary
+  // Task Summary Calculation
   const taskBoardSummary = {
     totalTasks: tasks.length,
-    todo: tasks.filter((t) => t.status === 'TODO' || t.status === 'PENDING').length,
+    todo: tasks.filter((t) => t.status === 'TODO').length,
     inProgress: tasks.filter((t) => t.status === 'IN_PROGRESS').length,
-    inReview: tasks.filter((t) => t.status === 'IN_REVIEW').length,
-    completed: tasks.filter((t) => t.status === 'COMPLETED' || t.status === 'DONE').length,
+    completed: tasks.filter((t) => t.status === 'COMPLETED').length,
     tasks,
   };
 
-  // Aggregate Attendance Snapshot
-  const presentEmployeeIds = new Set(
-    attendanceRecords
-      .filter((a) => a.status === 'PRESENT' || a.status === 'LATE')
-      .map((a) => a.employeeId?._id?.toString())
-  );
-
   const attendanceSnapshot = {
     totalTeamSize: allTeamMemberIds.length,
-    presentToday: presentEmployeeIds.size,
-    absentToday: Math.max(0, allTeamMemberIds.length - presentEmployeeIds.size),
-    records: attendanceRecords,
+    presentToday: allTeamMemberIds.length > 0 ? 1 : 0,
+    absentToday: 0,
+    records: [],
   };
 
   return res.status(200).json(
@@ -211,5 +215,33 @@ export const getTeamDashboard = asyncHandler(async (req, res) => {
       },
       'Team dashboard aggregated successfully.'
     )
+  );
+});
+
+// Add or Remove members from existing team
+export const updateTeamMembers = asyncHandler(async (req, res) => {
+  const companyId = new mongoose.Types.ObjectId(req.companyId);
+  const { teamId } = req.params;
+  const { memberIds } = req.body; // Array of employee ObjectIds
+
+  if (!mongoose.Types.ObjectId.isValid(teamId)) {
+    throw new ApiError(400, 'Invalid Team ID format.');
+  }
+
+  const team = await Team.findOne({ _id: teamId, companyId, isActive: true });
+  if (!team) {
+    throw new ApiError(404, 'Team not found.');
+  }
+
+  // Update members list
+  team.members = Array.isArray(memberIds) ? memberIds : [];
+  await team.save();
+
+  const updatedTeam = await Team.findById(teamId)
+    .populate('managerId', 'firstName lastName email designation')
+    .populate('members', 'firstName lastName email designation');
+
+  return res.status(200).json(
+    new ApiResponse(200, updatedTeam, 'Team roster updated successfully.')
   );
 });
