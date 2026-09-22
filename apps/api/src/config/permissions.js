@@ -3,13 +3,9 @@
  * 
  * Single source of truth for all granular permissions in the system.
  * Permissions are strings in the format: `resource.action`
- * 
- * Resources: payroll, leave, employee, company, attendance, task, finance, document, settings
- * Actions: create, read, update, delete, approve, reject, manage, export, configure
  */
 
 export const PERMISSIONS = {
-  // Payroll permissions
   PAYROLL: {
     CREATE: 'payroll.create',
     READ: 'payroll.read',
@@ -22,7 +18,6 @@ export const PERMISSIONS = {
     VIEW_OWN_PAYSLIP: 'payroll.view_own_payslip',
   },
 
-  // Leave permissions
   LEAVE: {
     CREATE: 'leave.create',
     READ: 'leave.read',
@@ -38,7 +33,6 @@ export const PERMISSIONS = {
     MANAGE_HOLIDAYS: 'leave.manage_holidays',
   },
 
-  // Employee permissions
   EMPLOYEE: {
     CREATE: 'employee.create',
     READ: 'employee.read',
@@ -51,7 +45,6 @@ export const PERMISSIONS = {
     VIEW_ORG_CHART: 'employee.view_org_chart',
   },
 
-  // Company permissions
   COMPANY: {
     READ: 'company.read',
     UPDATE: 'company.update',
@@ -61,7 +54,6 @@ export const PERMISSIONS = {
     VIEW_ANALYTICS: 'company.view_analytics',
   },
 
-  // Attendance permissions
   ATTENDANCE: {
     CHECK_IN: 'attendance.check_in',
     CHECK_OUT: 'attendance.check_out',
@@ -74,7 +66,6 @@ export const PERMISSIONS = {
     MANAGE_BIOMETRIC: 'attendance.manage_biometric',
   },
 
-  // Task permissions
   TASK: {
     CREATE: 'task.create',
     READ: 'task.read',
@@ -87,7 +78,6 @@ export const PERMISSIONS = {
     MANAGE_BOARDS: 'task.manage_boards',
   },
 
-  // Finance permissions
   FINANCE: {
     CREATE_EXPENSE: 'finance.create_expense',
     CREATE_INCOME: 'finance.create_income',
@@ -102,7 +92,6 @@ export const PERMISSIONS = {
     EXPORT: 'finance.export',
   },
 
-  // Document permissions
   DOCUMENT: {
     UPLOAD: 'document.upload',
     READ: 'document.read',
@@ -110,14 +99,12 @@ export const PERMISSIONS = {
     VIEW_OWN: 'document.view_own',
   },
 
-  // Settings permissions
   SETTINGS: {
     READ: 'settings.read',
     UPDATE: 'settings.update',
     MANAGE_INTEGRATIONS: 'settings.manage_integrations',
   },
 
-    // Calendar permissions
   CALENDAR: {
     READ: 'calendar.read',
     CREATE_COMPANY: 'calendar.create_company',
@@ -125,7 +112,6 @@ export const PERMISSIONS = {
     MANAGE: 'calendar.manage',
   },
 
-  // ... existing permissions
   TASKS: {
     READ: 'tasks.read',
     CREATE: 'tasks.create',
@@ -133,16 +119,10 @@ export const PERMISSIONS = {
     UPDATE_STATUS: 'tasks.update_status',
     DELETE: 'tasks.delete',
   },
-
 };
 
-/**
- * Default role → permission mappings
- * These are the BASE permissions. Companies can override via RolePermissions collection.
- */
 export const DEFAULT_ROLE_PERMISSIONS = {
   SUPER_ADMIN: [
-    // Super admin has everything across all companies
     ...Object.values(PERMISSIONS.PAYROLL),
     ...Object.values(PERMISSIONS.LEAVE),
     ...Object.values(PERMISSIONS.EMPLOYEE),
@@ -152,12 +132,11 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...Object.values(PERMISSIONS.FINANCE),
     ...Object.values(PERMISSIONS.DOCUMENT),
     ...Object.values(PERMISSIONS.SETTINGS),
-
     ...Object.values(PERMISSIONS.CALENDAR),
+    ...Object.values(PERMISSIONS.TASKS),
   ],
 
   COMPANY_ADMIN: [
-    // Company admin has full control within their company
     ...Object.values(PERMISSIONS.PAYROLL),
     ...Object.values(PERMISSIONS.LEAVE),
     ...Object.values(PERMISSIONS.EMPLOYEE),
@@ -167,16 +146,11 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...Object.values(PERMISSIONS.FINANCE),
     ...Object.values(PERMISSIONS.DOCUMENT),
     ...Object.values(PERMISSIONS.SETTINGS),
-
-    // Calendar permissions
-    PERMISSIONS.CALENDAR.READ,
-    PERMISSIONS.CALENDAR.CREATE_COMPANY,
-    PERMISSIONS.CALENDAR.CREATE_TEAM,
-    PERMISSIONS.CALENDAR.MANAGE,
+    ...Object.values(PERMISSIONS.CALENDAR),
+    ...Object.values(PERMISSIONS.TASKS),
   ],
 
   HR: [
-    // HR manages people, payroll, leave, attendance
     PERMISSIONS.PAYROLL.READ,
     PERMISSIONS.PAYROLL.APPROVE,
     PERMISSIONS.PAYROLL.RUN,
@@ -216,7 +190,6 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.FINANCE.VIEW_DASHBOARD,
 
     PERMISSIONS.DOCUMENT.READ,
-
     PERMISSIONS.CALENDAR.READ,
     PERMISSIONS.CALENDAR.CREATE_COMPANY,
     PERMISSIONS.CALENDAR.CREATE_TEAM,
@@ -224,7 +197,6 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   ],
 
   MANAGER: [
-    // Manager approves leave, manages team tasks, views team attendance
     PERMISSIONS.PAYROLL.VIEW_PAYSLIPS,
 
     PERMISSIONS.LEAVE.CREATE,
@@ -256,20 +228,17 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.FINANCE.VIEW_OWN,
 
     PERMISSIONS.DOCUMENT.READ,
-
     PERMISSIONS.CALENDAR.READ,
     PERMISSIONS.CALENDAR.CREATE_TEAM,
   ],
 
   EMPLOYEE: [
-    // Employee can only act on their own data
     PERMISSIONS.PAYROLL.VIEW_OWN_PAYSLIP,
 
     PERMISSIONS.LEAVE.CREATE,
     PERMISSIONS.LEAVE.VIEW_OWN,
 
     PERMISSIONS.EMPLOYEE.VIEW_OWN,
-
     PERMISSIONS.COMPANY.READ,
 
     PERMISSIONS.ATTENDANCE.CHECK_IN,
@@ -285,27 +254,21 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 
     PERMISSIONS.DOCUMENT.UPLOAD,
     PERMISSIONS.DOCUMENT.VIEW_OWN,
-    
     PERMISSIONS.CALENDAR.READ,
   ],
 };
 
-/**
- * Helper: Get all permission strings as a flat array
- */
-export const ALL_PERMISSIONS = Object.values(PERMISSIONS)
-  .flatMap(resource => Object.values(resource));
+// Safe Flattening for ALL_PERMISSIONS
+export const ALL_PERMISSIONS = Array.from(
+  new Set(
+    Object.values(PERMISSIONS).flatMap((resourceObject) => Object.values(resourceObject))
+  )
+);
 
-/**
- * Helper: Check if a permission string is valid
- */
 export const isValidPermission = (permission) => {
   return ALL_PERMISSIONS.includes(permission);
 };
 
-/**
- * Helper: Get permissions for a role (base defaults)
- */
 export const getDefaultPermissionsForRole = (role) => {
   return DEFAULT_ROLE_PERMISSIONS[role] || [];
 };

@@ -27,6 +27,13 @@ const userSchema = new mongoose.Schema(
       enum: ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'],
       default: 'EMPLOYEE',
     },
+    // ✅ Custom Role ID yahan add karein taake User level par bhi sync rahe
+    customRoleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CustomRole',
+      default: null,
+      index: true,
+    },
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
