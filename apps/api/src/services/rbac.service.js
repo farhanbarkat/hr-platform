@@ -3,6 +3,7 @@ import { RoleCapabilityOverride } from '../models/roleCapabilityOverride.model.j
 import { Employee } from '../models/employee.model.js';
 import { AccessLog } from '../models/accessLog.model.js';
 import { getDefaultPermissionsForRole } from '../config/permissions.js';
+import { CustomRole } from '../models/customRole.model.js';
 
 class RBACService {
   constructor() {
@@ -42,7 +43,7 @@ class RBACService {
     return permissions;
   }
 
-  // 2. Fetch Effective Permissions (Base Role + Overrides)
+  // 2. Fetch Effective Permissions (Base Role + Custom Role + Individual Overrides)
   async getUserPermissions(user) {
     if (!user) return [];
 
@@ -62,42 +63,54 @@ class RBACService {
       return userCached.permissions;
     }
 
-    // Step A: Base permissions hasil karein
+    // Step A: Base Role Permissions
     const basePermissions = await this.getBaseRolePermissions(companyId, user.role);
     let effectivePermissions = new Set(basePermissions);
 
     try {
-      // Step B: User ka linked employee ID nikalein
-      let employeeId = user.employeeId;
-      if (!employeeId) {
-        const empDoc = await Employee.findOne({
+      // Step B: Resolve Employee Record
+      let employee = null;
+      if (user.employeeId) {
+        employee = await Employee.findById(user.employeeId).select('_id customRoleId');
+      } else {
+        employee = await Employee.findOne({
           $or: [{ userId }, { email: user.email }],
           companyId,
-        }).select('_id');
-        employeeId = empDoc?._id;
+        }).select('_id customRoleId');
       }
 
-      // Step C: RoleCapabilityOverride check karein
-      if (employeeId) {
+      // Step C: Agar user ke paas Custom Role (e.g. HOD, Supervisor) hai toh uske permissions add karein
+      const customRoleId = user.customRoleId || employee?.customRoleId;
+      if (customRoleId) {
+        const customRoleDoc = await CustomRole.findOne({
+          _id: customRoleId,
+          companyId,
+          isActive: true,
+        }).lean();
+
+        if (customRoleDoc && Array.isArray(customRoleDoc.permissions)) {
+          customRoleDoc.permissions.forEach((perm) => effectivePermissions.add(perm));
+        }
+      }
+
+      // Step D: Individual Capability Overrides (Granted (+) aur Removed (-))
+      if (employee?._id) {
         const override = await RoleCapabilityOverride.findOne({
           companyId,
-          employeeId,
+          employeeId: employee._id,
         }).lean();
 
         if (override) {
-          // Extra granted permissions add karein
           if (Array.isArray(override.grantedPermissions)) {
             override.grantedPermissions.forEach((perm) => effectivePermissions.add(perm));
           }
-
-          // Revoked/Restricted permissions delete karein
           if (Array.isArray(override.removedPermissions)) {
             override.removedPermissions.forEach((perm) => effectivePermissions.delete(perm));
           }
         }
       }
     } catch (err) {
-      console.error('RBAC: Error resolving capability overrides:', err.message);
+      console.error('RBAC: Error resolving custom role & overrides:', err.message);
     }
 
     const finalPermissions = Array.from(effectivePermissions);

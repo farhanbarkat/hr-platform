@@ -31,6 +31,7 @@ import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
 import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
 import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
 import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
+import CalendarDashboard from './features/calendar/CalendarDashboard.jsx'; // ✅ Calendar import kiya
 import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
 import { LoanManagementDesk } from './features/loans/index.js';
 import { TaskWorkspaceDesk } from './features/tasks/index.js';
@@ -268,6 +269,16 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DirectChatDesk />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ Calendar & Events Dashboard Route */}
+        <Route
+          path="calendar"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.CALENDAR.READ}>
+              <CalendarDashboard />
             </ProtectedRoute>
           }
         />

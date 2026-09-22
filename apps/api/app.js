@@ -105,8 +105,8 @@ app.use('/api/v1/super-admin/advanced', superAdminAdvancedRouter);
 app.use('/api/v1/companies', companyRouter);
 app.use('/api/v1/departments', departmentRouter);
 app.use('/api/v1/calendar', calendarRoutes);
-app.use('/api/v1/roles/overrides', roleOverrideRouter);
-app.use('/api/v1/roles/custom', customRoleRouter);
+app.use('/api/v1/role-overrides', roleOverrideRouter);
+app.use('/api/v1/custom-roles', customRoleRouter);
 
 // Protected tenant/company routes (with read-only guard applied)
 app.use('/api/v1/employees', enforceReadOnlyImpersonation, employeeRouter);

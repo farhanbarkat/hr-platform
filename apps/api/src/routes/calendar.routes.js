@@ -16,8 +16,8 @@ router.use(verifyJWT);
 router.use(tenantMiddleware);
 
 router.get('/', requirePermission(PERMISSIONS.CALENDAR.READ), getCalendarEvents);
-router.post('/', requirePermission(PERMISSIONS.CALENDAR.READ), createCalendarEvent);
-router.put('/:id', requirePermission(PERMISSIONS.CALENDAR.READ), updateCalendarEvent);
-router.delete('/:id', requirePermission(PERMISSIONS.CALENDAR.READ), deleteCalendarEvent);
+router.post('/', requirePermission(PERMISSIONS.CALENDAR.MANAGE), createCalendarEvent);
+router.put('/:id', requirePermission(PERMISSIONS.CALENDAR.MANAGE), updateCalendarEvent);
+router.delete('/:id', requirePermission(PERMISSIONS.CALENDAR.MANAGE), deleteCalendarEvent);
 
 export default router;

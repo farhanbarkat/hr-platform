@@ -10,6 +10,7 @@ import {
   ALL_PERMISSIONS,
   isValidPermission,
 } from '../config/permissions.js';
+import { rbacService } from '../services/rbac.service.js';
 
 /**
  * 1. UI Matrix & Defaults Data
@@ -130,6 +131,9 @@ export const updateCustomRole = asyncHandler(async (req, res) => {
 
   await role.save();
 
+  // 🔄 Role ke permissions update hone par poori company ki cache refresh
+  rbacService.invalidateCompanyCache(companyId);
+
   return res.status(200).json(
     new ApiResponse(200, role, 'Custom role updated successfully.')
   );
@@ -169,6 +173,9 @@ export const assignCustomRole = asyncHandler(async (req, res) => {
       { _id: employee.userId, companyId },
       { $set: { customRoleId: customRoleId || null } }
     );
+
+    // 🔄 Instant Cache Invalidation: Employee ki permissions cache turant reset karein
+    rbacService.invalidateUserCache(companyId, employee.userId);
   }
 
   return res.status(200).json(
