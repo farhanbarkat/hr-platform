@@ -1,3 +1,5 @@
+import { afterAll, jest } from '@jest/globals';
+
 /**
  * Jest Setup File
  * Runs before each test suite
@@ -11,7 +13,7 @@ process.env.JWT_ACCESS_EXPIRY = '15m';
 process.env.JWT_REFRESH_EXPIRY = '7d';
 
 // Mock Redis to avoid connection issues in tests
-jest.mock('../src/db/redis.js', () => ({
+jest.unstable_mockModule('../src/db/redis.js', () => ({
   get: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
