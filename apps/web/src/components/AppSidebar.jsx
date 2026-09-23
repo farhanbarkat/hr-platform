@@ -385,6 +385,18 @@ export default function AppSidebar() {
         hasPermission(PERMISSIONS.CALENDAR.READ),
     },
     {
+      label: 'Exit & Offboarding',
+      path: '/company-admin/offboarding',
+      Icon: Icons.SignOut,
+      isAccessible: isSuperAdmin || isCompanyAdmin || user?.role === 'HR' || hasPermission(PERMISSIONS.EMPLOYEE.UPDATE),
+    },
+    {
+      label: 'Helpdesk Triage',
+      path: '/company-admin/helpdesk',
+      Icon: Icons.Chat,
+      isAccessible: isSuperAdmin || isCompanyAdmin || user?.role === 'HR',
+    },
+    {
       label: 'Leave Operations',
       path: '/company-admin/leaves',
       Icon: Icons.Leaves,

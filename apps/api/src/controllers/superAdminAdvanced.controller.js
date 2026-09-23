@@ -223,7 +223,12 @@ export const getSupportTickets = asyncHandler(async (req, res) => {
   const filter = {};
   if (status) filter.status = status;
   if (priority) filter.priority = priority;
-  if (companyId) filter.companyId = companyId;
+  if (companyId) {
+    if (!mongoose.Types.ObjectId.isValid(companyId)) {
+      throw new ApiError(400, 'Invalid company ID.');
+    }
+    filter.companyId = new mongoose.Types.ObjectId(companyId);
+  }
 
   const tickets = await PlatformSupportTicket.find(filter)
     .populate('companyId', 'name email')
@@ -237,17 +242,28 @@ export const updateSupportTicket = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status, priority, adminNotes } = req.body;
 
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, 'Invalid support ticket ID.');
+  }
+
   const updateData = {};
   if (status) {
+    if (!['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(status)) {
+      throw new ApiError(400, 'Invalid support ticket status.');
+    }
     updateData.status = status;
     if (status === 'RESOLVED' || status === 'CLOSED') {
       updateData.resolvedAt = new Date();
     }
   }
   if (priority) updateData.priority = priority;
-  if (adminNotes) updateData.adminNotes = adminNotes;
+  if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
 
-  const ticket = await PlatformSupportTicket.findByIdAndUpdate(id, updateData, {
+  if (Object.keys(updateData).length === 0) {
+    throw new ApiError(400, 'At least one support ticket field is required.');
+  }
+
+  const ticket = await PlatformSupportTicket.findOneAndUpdate({ _id: id }, updateData, {
   returnDocument: 'after',
   runValidators: true,
 });

@@ -31,7 +31,9 @@ import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
 import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
 import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
 import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
-import CalendarDashboard from './features/calendar/CalendarDashboard.jsx'; // ✅ Calendar import kiya
+import CalendarDashboard from './features/calendar/CalendarDashboard.jsx';
+import OffboardingManagementDesk from './features/offboarding/OffboardingManagementDesk.jsx';
+import CompanyHelpdeskDesk from './features/helpdesk/CompanyHelpdeskDesk.jsx'; // ✅ Company Helpdesk imported
 import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
 import { LoanManagementDesk } from './features/loans/index.js';
 import { TaskWorkspaceDesk } from './features/tasks/index.js';
@@ -160,6 +162,7 @@ export default function App() {
               return hasAnyPerm([
                 'employee.read',
                 'employee.create',
+                'employee.update',
                 'leave.read',
                 'leave.view_team',
                 'leave.approve_hr',
@@ -273,12 +276,32 @@ export default function App() {
           }
         />
 
-        {/* ✅ Calendar & Events Dashboard Route */}
+        {/* Calendar & Events Dashboard Route */}
         <Route
           path="calendar"
           element={
             <ProtectedRoute requiredPermission={PERMISSIONS.CALENDAR.READ}>
               <CalendarDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Offboarding & Exit Operations Route */}
+        <Route
+          path="offboarding"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.EMPLOYEE.UPDATE}>
+              <OffboardingManagementDesk />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ Company Helpdesk & Triage Route */}
+        <Route
+          path="helpdesk"
+          element={
+            <ProtectedRoute>
+              <CompanyHelpdeskDesk />
             </ProtectedRoute>
           }
         />
