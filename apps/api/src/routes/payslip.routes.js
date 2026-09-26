@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
-import { requireRole } from '../middlewares/rbac.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 import {
   createAdjustment,
   generatePdf,
@@ -16,18 +17,18 @@ router.use(verifyJWT, tenantMiddleware);
 // Post-approval adjustments
 router
   .route('/adjustments')
-  .post(requireRole('COMPANY_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR'), createAdjustment);
+  .post(requirePermission(PERMISSIONS.PAYROLL.UPDATE), createAdjustment);
 
 // PDF Generation and Secure Downloads
 router
   .route('/:payslipId/generate-pdf')
-  .post(requireRole('COMPANY_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR'), generatePdf);
+  .post(requirePermission(PERMISSIONS.PAYROLL.RUN), generatePdf);
 router.route('/:payslipId/download').get(getDownloadUrl);
 
 // Direct update endpoint for testing immutability
 router
   .route('/:payslipId')
-  .put(requireRole('COMPANY_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR'), updatePayslip)
-  .patch(requireRole('COMPANY_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR'), updatePayslip);
+  .put(requirePermission(PERMISSIONS.PAYROLL.UPDATE), updatePayslip)
+  .patch(requirePermission(PERMISSIONS.PAYROLL.UPDATE), updatePayslip);
 
 export default router;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PERMISSIONS } from '../../config/permissions.js';
@@ -15,6 +15,15 @@ export default function ExecutiveOverview() {
   const { user, isSuperAdmin, hasPermission, hasAnyPermission } = useAuth();
   const navigate = useNavigate();
 
+  const canReadEmployees = hasPermission(PERMISSIONS.EMPLOYEE.READ);
+  const canReadAttendance = hasPermission(PERMISSIONS.ATTENDANCE.READ);
+  const canReadPendingLeaves = hasAnyPermission([
+    PERMISSIONS.LEAVE.VIEW_TEAM,
+    PERMISSIONS.LEAVE.READ,
+  ]);
+  const can = (perm) => hasPermission(perm);
+  const canAny = (perms) => hasAnyPermission(perms);
+
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [attendanceStats, setAttendanceStats] = useState({ onFloor: 0, absent: 0, missing: 0, ratio: 0 });
   const [pendingLeaves, setPendingLeaves] = useState(0);
@@ -30,9 +39,9 @@ export default function ExecutiveOverview() {
         setLoading(true);
 
         const [empRes, attRes, leaveRes] = await Promise.allSettled([
-          apiClient.get('/employees?limit=200'),
-          apiClient.get('/attendance?limit=200'),
-          apiClient.get('/leaves/pending-approvals'),
+          canReadEmployees ? apiClient.get('/employees?limit=200') : Promise.resolve(null),
+          canReadAttendance ? apiClient.get('/attendance?limit=200') : Promise.resolve(null),
+          canReadPendingLeaves ? apiClient.get('/leaves/pending-approvals') : Promise.resolve(null),
         ]);
 
         if (!isMounted) return;
@@ -98,10 +107,8 @@ export default function ExecutiveOverview() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [canReadAttendance, canReadEmployees, canReadPendingLeaves]);
 
-  const can = (perm) => isSuperAdmin || user?.role === 'COMPANY_ADMIN' || user?.role === 'ADMIN' || hasPermission(perm);
-  const canAny = (perms) => isSuperAdmin || user?.role === 'COMPANY_ADMIN' || user?.role === 'ADMIN' || hasAnyPermission(perms);
   const designation = user?.jobTitle || user?.designation || 'Operational Staff';
 
   return (
@@ -135,45 +142,51 @@ export default function ExecutiveOverview() {
 
       {/* 2. Top Metric Ribbon */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div
-          onClick={() => navigate('/company-admin/employees')}
-          className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs cursor-pointer hover:border-[#8C5D17] transition-all"
-        >
-          <span className="text-[9px] font-mono text-[#728294] uppercase tracking-wider block">TOTAL ACTIVE HEADCOUNT</span>
-          <div className="text-xl font-bold font-mono text-[#16233B] mt-1">
-            {loading ? '...' : totalEmployees} <span className="text-[10px] font-normal text-[#1E7E34]">staff</span>
+        {canReadEmployees && (
+          <div
+            onClick={() => navigate('/company-admin/employees')}
+            className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs cursor-pointer hover:border-[#8C5D17] transition-all"
+          >
+            <span className="text-[9px] font-mono text-[#728294] uppercase tracking-wider block">TOTAL ACTIVE HEADCOUNT</span>
+            <div className="text-xl font-bold font-mono text-[#16233B] mt-1">
+              {loading ? '...' : totalEmployees} <span className="text-[10px] font-normal text-[#1E7E34]">staff</span>
+            </div>
+            <div className="text-[10px] text-[#728294] mt-0.5">Workforce active records</div>
           </div>
-          <div className="text-[10px] text-[#728294] mt-0.5">Workforce active records</div>
-        </div>
+        )}
 
-        <div
-          onClick={() => navigate('/company-admin/attendance')}
-          className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs cursor-pointer hover:border-[#8C5D17] transition-all"
-        >
-          <span className="text-[9px] font-mono text-[#728294] uppercase tracking-wider block">CURRENT SHIFT ATTENDANCE</span>
-          <div className="text-xl font-bold font-mono text-[#1E7E34] mt-1">
-            {loading ? '...' : `${attendanceStats.ratio}%`}
-            <span className="text-[10px] text-[#B83E28] font-normal ml-1">
-              ({attendanceStats.onFloor} on-floor)
-            </span>
+        {canReadAttendance && (
+          <div
+            onClick={() => navigate('/company-admin/attendance')}
+            className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs cursor-pointer hover:border-[#8C5D17] transition-all"
+          >
+            <span className="text-[9px] font-mono text-[#728294] uppercase tracking-wider block">CURRENT SHIFT ATTENDANCE</span>
+            <div className="text-xl font-bold font-mono text-[#1E7E34] mt-1">
+              {loading ? '...' : `${attendanceStats.ratio}%`}
+              <span className="text-[10px] text-[#B83E28] font-normal ml-1">
+                ({attendanceStats.onFloor} on-floor)
+              </span>
+            </div>
+            <div className="text-[10px] text-[#728294] mt-0.5">
+              {attendanceStats.absent} off-duty / absent
+            </div>
           </div>
-          <div className="text-[10px] text-[#728294] mt-0.5">
-            {attendanceStats.absent} off-duty / absent
-          </div>
-        </div>
+        )}
 
-        <div
-          onClick={() => navigate('/company-admin/leaves')}
-          className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs cursor-pointer hover:border-[#8C5D17] transition-all"
-        >
-          <span className="text-[9px] font-mono text-[#728294] uppercase tracking-wider block">PENDING APPROVAL QUEUE</span>
-          <div className="text-xl font-bold font-mono text-[#8C5D17] mt-1">
-            {loading ? '...' : pendingLeaves} <span className="text-[10px] font-normal text-[#728294]">requests</span>
+        {canReadPendingLeaves && (
+          <div
+            onClick={() => navigate('/company-admin/leaves')}
+            className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs cursor-pointer hover:border-[#8C5D17] transition-all"
+          >
+            <span className="text-[9px] font-mono text-[#728294] uppercase tracking-wider block">PENDING APPROVAL QUEUE</span>
+            <div className="text-xl font-bold font-mono text-[#8C5D17] mt-1">
+              {loading ? '...' : pendingLeaves} <span className="text-[10px] font-normal text-[#728294]">requests</span>
+            </div>
+            <div className="text-[10px] text-[#1E7E34] mt-0.5">
+              {pendingLeaves > 0 ? 'Requires attention' : 'Queue cleared'}
+            </div>
           </div>
-          <div className="text-[10px] text-[#1E7E34] mt-0.5">
-            {pendingLeaves > 0 ? 'Requires attention' : 'Queue cleared'}
-          </div>
-        </div>
+        )}
 
         <div
           onClick={() => navigate('/company-admin/payroll')}
@@ -216,7 +229,7 @@ export default function ExecutiveOverview() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <AttendanceClockWidget />
+          {can(PERMISSIONS.ATTENDANCE.CHECK_IN) && <AttendanceClockWidget />}
 
           {can(PERMISSIONS.COMPANY.READ) && <QuickShiftAssignmentWidget />}
 

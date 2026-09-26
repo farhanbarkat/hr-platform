@@ -79,7 +79,7 @@ class RBACService {
         }).select('_id customRoleId');
       }
 
-      // Step C: Agar user ke paas Custom Role (e.g. HOD, Supervisor) hai toh uske permissions add karein
+      // A custom role is the employee's permission set when one is assigned.
       const customRoleId = user.customRoleId || employee?.customRoleId;
       if (customRoleId) {
         const customRoleDoc = await CustomRole.findOne({
@@ -89,7 +89,7 @@ class RBACService {
         }).lean();
 
         if (customRoleDoc && Array.isArray(customRoleDoc.permissions)) {
-          customRoleDoc.permissions.forEach((perm) => effectivePermissions.add(perm));
+          effectivePermissions = new Set(customRoleDoc.permissions);
         }
       }
 
@@ -132,19 +132,19 @@ class RBACService {
     }
 
     const permissions = await this.getUserPermissions(user);
-    return permissions.includes(permission);
+    return permissions.includes('*') || permissions.includes(permission);
   }
 
   async hasAllPermissions(user, permissions) {
     if (user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN') return true;
     const userPerms = await this.getUserPermissions(user);
-    return permissions.every((p) => userPerms.includes(p));
+    return userPerms.includes('*') || permissions.every((p) => userPerms.includes(p));
   }
 
   async hasAnyPermission(user, permissions) {
     if (user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN') return true;
     const userPerms = await this.getUserPermissions(user);
-    return permissions.some((p) => userPerms.includes(p));
+    return userPerms.includes('*') || permissions.some((p) => userPerms.includes(p));
   }
 
   async logAccessAttempt(data) {

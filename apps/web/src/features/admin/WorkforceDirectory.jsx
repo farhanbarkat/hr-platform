@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PERMISSIONS } from '../../config/permissions.js';
+import EmployeeDocumentsPanel from '../employees/EmployeeDocumentsPanel.jsx';
 
 export default function WorkforceDirectory() {
   const { isSuperAdmin, user, hasPermission } = useAuth();
@@ -19,6 +20,7 @@ export default function WorkforceDirectory() {
   const [formError, setFormError] = useState('');
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [documentsEmployee, setDocumentsEmployee] = useState(null);
 
   const [form, setForm] = useState({
     firstName: '',
@@ -292,6 +294,13 @@ export default function WorkforceDirectory() {
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-right space-x-2">
+                    <button
+                      onClick={() => setDocumentsEmployee(emp)}
+                      className="px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#FAF4E8] border border-[#D8D3C7] text-[#8C5D17] text-[10px] font-mono font-bold rounded cursor-pointer transition-colors"
+                      title="Manage employee documents"
+                    >
+                      DOCUMENTS
+                    </button>
                     <button
                       onClick={() =>
                         navigate('/company-admin/roles-capabilities')
@@ -609,6 +618,13 @@ export default function WorkforceDirectory() {
             )}
           </div>
         </div>
+      )}
+
+      {documentsEmployee && (
+        <EmployeeDocumentsPanel
+          employee={documentsEmployee}
+          onClose={() => setDocumentsEmployee(null)}
+        />
       )}
     </div>
   );

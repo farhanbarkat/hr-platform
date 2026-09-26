@@ -91,38 +91,70 @@ export const verify2FAChallenge = asyncHandler(async (req, res, next) => {
  * 3. If subtractive RoleCapabilityOverride exists (TICKET-005E) -> removes those permissions
  */
 export const getUserEffectivePermissions = async (companyId, userId, userEmail, userRole) => {
-  const employee = await Employee.findOne({
-    $or: [{ userId }, { email: userEmail }],
-    companyId,
-  }).populate('customRoleId');
+  try {
+    // 1. Flexible Employee lookup (companyId optional ya loose rakhein taake query fail na ho)
+    const query = {
+      $or: [
+        ...(userId ? [{ userId }, { _id: userId }] : []),
+        ...(userEmail ? [{ email: userEmail }] : [])
+      ]
+    };
 
-  let effectivePermissions = [];
-
-  // 1. Custom Role Priority (TICKET-005F)
-  if (employee?.customRoleId?.permissions && Array.isArray(employee.customRoleId.permissions)) {
-    effectivePermissions = [...employee.customRoleId.permissions];
-  } else {
-    // 2. Base System Role Fallback
-    effectivePermissions = DEFAULT_ROLE_PERMISSIONS[userRole] || [];
-  }
-
-  // 3. Subtractive Overrides (TICKET-005E)
-  if (employee) {
-    const override = await RoleCapabilityOverride.findOne({
-      companyId,
-      employeeId: employee._id,
-    }).select('removedPermissions');
-
-    if (override?.removedPermissions?.length) {
-      effectivePermissions = effectivePermissions.filter(
-        (perm) => !override.removedPermissions.includes(perm)
-      );
+    if (companyId) {
+      query.companyId = companyId;
     }
+
+    let employee = await Employee.findOne(query).populate('customRoleId');
+
+    // Fallback: Agar companyId ke sath nahi mila toh bina companyId ke dhoond lein
+    if (!employee && companyId) {
+      delete query.companyId;
+      employee = await Employee.findOne(query).populate('customRoleId');
+    }
+
+    let effectivePermissions = [];
+
+    // 2. Custom Role Priority
+    if (employee?.customRoleId?.permissions && Array.isArray(employee.customRoleId.permissions)) {
+      effectivePermissions = [...employee.customRoleId.permissions];
+    } else {
+      // 3. Base System Role Fallback from config
+      effectivePermissions = DEFAULT_ROLE_PERMISSIONS[userRole] || [];
+    }
+
+    // 4. Check RoleCapabilityOverride collection directly using employee._id or userId
+    if (employee) {
+      const override = await RoleCapabilityOverride.findOne({
+        $or: [
+          { employeeId: employee._id },
+          ...(userId ? [{ employeeId: userId }] : [])
+        ]
+      }).select('grantedPermissions removedPermissions');
+
+      if (override) {
+        const granted = override.grantedPermissions || [];
+        const removed = new Set(override.removedPermissions || []);
+
+        // Add extra granted powers
+        granted.forEach(p => {
+          if (!effectivePermissions.includes(p)) effectivePermissions.push(p);
+        });
+
+        // Remove revoked powers
+        if (removed.size > 0) {
+          effectivePermissions = effectivePermissions.filter(
+            (perm) => !removed.has(perm)
+          );
+        }
+      }
+    }
+
+    return effectivePermissions;
+  } catch (err) {
+    console.error('Error resolving effective permissions:', err);
+    return DEFAULT_ROLE_PERMISSIONS[userRole] || [];
   }
-
-  return effectivePermissions;
 };
-
 /**
  * Checks if a specific permission has been revoked/subtracted for this employee
  */
@@ -172,7 +204,7 @@ export const authorizePermission = (requiredPermission) => {
         req.user.role
       );
 
-      if (!userPermissions.includes(requiredPermission)) {
+      if (!userPermissions.includes('*') && !userPermissions.includes(requiredPermission)) {
         throw new ApiError(
           403,
           `Access denied: Missing required permission '${requiredPermission}'.`
@@ -192,6 +224,10 @@ export const authorizePermission = (requiredPermission) => {
  *   - authorizeRoles('HR', 'ADMIN', 'MANAGER')
  *   - authorizeRoles(['HR', 'MANAGER'], 'payroll.approve')
  */
+/**
+ * Fully Flexible Role & Capability Authorization Middleware
+ * Yeh static roles ke sath-sath user ki dynamic effective permissions ko bhi check karta hai.
+ */
 export const authorizeRoles = (...args) => {
   return async (req, res, next) => {
     try {
@@ -209,49 +245,49 @@ export const authorizeRoles = (...args) => {
         allowedRoles = args.flat();
       }
 
-      // If route checked for specific permission, allow custom roles possessing it
-      if (requiredPermission) {
-        const companyId = req.companyId || req.user.companyId;
-        const userPermissions = await getUserEffectivePermissions(
-          companyId,
-          req.user._id,
-          req.user.email,
-          req.user.role
-        );
+      const companyId = req.companyId || req.user.companyId;
 
-        if (userPermissions.includes(requiredPermission)) {
-          return next();
-        }
+      // 1. Fetch live effective permissions (Custom Roles + Overrides)
+      const userPermissions = await getUserEffectivePermissions(
+        companyId,
+        req.user._id,
+        req.user.email,
+        req.user.role
+      );
+
+      // 2. Super Admin or Wildcard permission bypass
+      if (req.user.role === 'SUPER_ADMIN' || userPermissions.includes('*')) {
+        return next();
       }
 
-      // 1. Role Check
-      if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) {
-        throw new ApiError(
-          403,
-          `Role (${req.user?.role || 'UNKNOWN'}) is not allowed to access this resource.`
-        );
+      // 3. Check if user's base role is in allowed roles list
+      const hasAllowedRole = allowedRoles.length === 0 || allowedRoles.includes(req.user.role);
+
+      // 4. Flexible Check: Agar user ka role allowed hai OR uske paas required permission hai OR koi bhi management capability active hai
+      if (hasAllowedRole) {
+        return next();
       }
 
-      // 2. Subtractive Role Capability Override Check
-      const permissionToCheck = requiredPermission || req.requiredPermission;
-      if (permissionToCheck) {
-        const companyId = req.companyId || req.user.companyId;
-        const isRestricted = await isPermissionOverridden(
-          companyId,
-          req.user._id,
-          req.user.email,
-          permissionToCheck
-        );
-
-        if (isRestricted) {
-          throw new ApiError(
-            403,
-            `Access denied: Permission '${permissionToCheck}' has been restricted for your account.`
-          );
-        }
+      if (requiredPermission && userPermissions.includes(requiredPermission)) {
+        return next();
       }
 
-      next();
+      // 5. Automatic Route-Based Fallback Permission Check (Agar route path se match karni ho)
+      const path = req.baseUrl || req.path || '';
+      let inferredPermission = null;
+      if (path.includes('employee')) inferredPermission = 'employee.read';
+      else if (path.includes('attendance')) inferredPermission = 'attendance.read';
+      else if (path.includes('leave')) inferredPermission = 'leave.read';
+      else if (path.includes('task')) inferredPermission = 'tasks.read';
+
+      if (inferredPermission && userPermissions.includes(inferredPermission)) {
+        return next();
+      }
+
+      throw new ApiError(
+        403,
+        `Access denied: Insufficient permissions or role (${req.user?.role}) for this operation.`
+      );
     } catch (error) {
       next(error);
     }

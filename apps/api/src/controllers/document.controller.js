@@ -153,7 +153,7 @@ export const getDownloadUrl = asyncHandler(async (req, res) => {
     }
   }
 
-  const downloadUrl = await generatePresignedDownloadUrl(document.s3Key, document.fileName);
+  const downloadUrl = await generatePresignedDownloadUrl(document.s3Key, 300, document.fileName);
 
   return res.status(200).json(
     new ApiResponse(

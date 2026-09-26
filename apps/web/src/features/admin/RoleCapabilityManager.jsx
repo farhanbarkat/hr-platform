@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { PERMISSIONS } from '../../config/permissions.js';
+import { useAuth } from '../../context/AuthContext.jsx'; // ✅ Imported useAuth to access refreshUser
 
 const BASE_ROLE_PERMISSIONS = {
   SUPER_ADMIN: ['*'],
@@ -79,6 +80,8 @@ const PERMISSION_CATALOG = [
 ];
 
 export default function RoleCapabilityManager() {
+  const { user: currentUser, refreshUser } = useAuth(); // ✅ Extract refreshUser
+
   // Navigation View: 'EMPLOYEE_POWERS' | 'CUSTOM_ROLE_TEMPLATES'
   const [activeTab, setActiveTab] = useState('EMPLOYEE_POWERS');
 
@@ -279,6 +282,11 @@ export default function RoleCapabilityManager() {
         type: 'success',
         text: `Permissions & Role bundle successfully updated for ${selectedEmployee.firstName} ${selectedEmployee.lastName}!`,
       });
+
+      // ✅ If the admin is updating their own permissions, refresh session context immediately
+      if (currentUser?._id === selectedEmployee._id || currentUser?.employeeId === selectedEmployee._id) {
+        await refreshUser();
+      }
 
       loadData(selectedEmployee._id);
     } catch (err) {

@@ -9,6 +9,7 @@ import {
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.use(tenantMiddleware);
  */
 router.get(
   '/',
-  requirePermission('departments:read'),
+  requirePermission(PERMISSIONS.DEPARTMENT.READ),
   getDepartments
 );
 
@@ -76,7 +77,7 @@ router.get(
  */
 router.post(
   '/',
-  requirePermission('departments:create'),
+  requirePermission(PERMISSIONS.DEPARTMENT.CREATE),
   createDepartment
 );
 
@@ -103,7 +104,7 @@ router.post(
  */
 router.put(
   '/:id',
-  requirePermission('departments:update'),
+  requirePermission(PERMISSIONS.DEPARTMENT.UPDATE),
   updateDepartment
 );
 
@@ -130,7 +131,7 @@ router.put(
  */
 router.patch(
   '/:id/deactivate',
-  requirePermission('departments:delete'),
+  requirePermission(PERMISSIONS.DEPARTMENT.DELETE),
   deactivateDepartment
 );
 
@@ -172,7 +173,7 @@ router.patch(
  */
 router.patch(
   '/employees/:employeeId/reassign',
-  requirePermission('departments:reassign'),
+  requirePermission(PERMISSIONS.DEPARTMENT.REASSIGN),
   reassignEmployeeDepartment
 );
 

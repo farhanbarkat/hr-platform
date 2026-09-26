@@ -7,7 +7,8 @@ import {
 } from '../controllers/salaryType.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
-import { requireRole } from '../middlewares/rbac.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.use(tenantMiddleware);
 // Company Admin / HR define salary types
 router.post(
   '/',
-  requireRole(['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR', 'HR_MANAGER']),
+  requirePermission(PERMISSIONS.PAYROLL.UPDATE),
   createSalaryType
 );
 
@@ -26,7 +27,7 @@ router.get('/', getSalaryTypes);
 // HR/Manager records monthly variables
 router.post(
   '/variable-input',
-  requireRole(['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR', 'HR_MANAGER', 'MANAGER']),
+  requirePermission(PERMISSIONS.PAYROLL.UPDATE),
   recordVariablePayrollInput
 );
 

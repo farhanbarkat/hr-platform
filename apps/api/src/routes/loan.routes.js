@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { verifyJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requireEntitlement } from '../middlewares/entitlement.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
 import {
   applyLoan,
   getMyLoans,
@@ -33,7 +34,7 @@ router.get('/my-loans', getMyLoans);
 // ==========================================
 router.post(
   '/run-payroll',
-  authorizeRoles('COMPANY_ADMIN', 'HR', 'SUPER_ADMIN'),
+  requirePermission('payroll.run'),
   runMonthlyPayroll
 );
 
@@ -42,7 +43,7 @@ router.post(
 // ==========================================
 router.get(
   '/:loanId/repayments',
-  authorizeRoles('COMPANY_ADMIN', 'HR', 'SUPER_ADMIN', 'EMPLOYEE'),
+  requirePermission('finance.read_expense'),
   getLoanRepaymentHistory
 );
 
@@ -51,13 +52,13 @@ router.get(
 // ==========================================
 router.get(
   '/pre-approval-check/:loanId',
-  authorizeRoles('COMPANY_ADMIN', 'HR', 'SUPER_ADMIN'),
+  requirePermission('finance.approve_loan'),
   checkLoanPreApproval
 );
 
 router.patch(
   '/:loanId/approval',
-  authorizeRoles('COMPANY_ADMIN', 'HR', 'SUPER_ADMIN'),
+  requirePermission('finance.approve_loan'),
   processLoanApproval
 );
 
@@ -66,7 +67,7 @@ router.patch(
 // ==========================================
 router.get(
   '/',
-  authorizeRoles('COMPANY_ADMIN', 'HR', 'SUPER_ADMIN'),
+  requirePermission('finance.read_expense'),
   getAllCompanyLoans
 );
 

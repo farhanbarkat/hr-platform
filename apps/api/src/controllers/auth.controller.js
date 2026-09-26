@@ -3,6 +3,10 @@ import QRCode from 'qrcode';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model.js';
+import { Employee } from '../models/employee.model.js';
+import { RoleCapabilityOverride } from '../models/roleCapabilityOverride.model.js';
+import { CustomRole } from '../models/customRole.model.js';
+import { DEFAULT_ROLE_PERMISSIONS } from '../config/permissions.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -25,6 +29,56 @@ const MANDATORY_2FA_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR'];
 const getChallengeUserId = (req) => req.challengeUser?._id;
 
 /**
+ * Helper to resolve dynamic effective permissions during login/token generation
+ */
+const resolveUserPermissionsForToken = async (user) => {
+  const baseRole = String(user.role || 'EMPLOYEE').toUpperCase();
+  if (baseRole === 'SUPER_ADMIN' || user.isCompanyOwner) {
+    return ['*'];
+  }
+
+  try {
+    const employee = await Employee.findOne({
+      $or: [{ userId: user._id }, { email: user.email }],
+      companyId: user.companyId,
+    }).populate('customRoleId');
+
+    let effectivePermissions = [];
+
+    if (employee?.customRoleId?.permissions && Array.isArray(employee.customRoleId.permissions)) {
+      effectivePermissions = [...employee.customRoleId.permissions];
+    } else {
+      effectivePermissions = DEFAULT_ROLE_PERMISSIONS[user.role] || [];
+    }
+
+    if (employee) {
+      const override = await RoleCapabilityOverride.findOne({
+        companyId: user.companyId,
+        employeeId: employee._id,
+      });
+
+      if (override) {
+        const granted = override.grantedPermissions || [];
+        const removed = new Set(override.removedPermissions || []);
+
+        granted.forEach((p) => {
+          if (!effectivePermissions.includes(p)) effectivePermissions.push(p);
+        });
+
+        if (removed.size > 0) {
+          effectivePermissions = effectivePermissions.filter((perm) => !removed.has(perm));
+        }
+      }
+    }
+
+    return effectivePermissions;
+  } catch (err) {
+    console.error('Error resolving token permissions:', err);
+    return DEFAULT_ROLE_PERMISSIONS[user.role] || [];
+  }
+};
+
+/**
  * @desc    Login Step 1 (Password verification & 2FA evaluation)
  * @route   POST /api/v1/auth/login
  */
@@ -37,7 +91,6 @@ export const login = asyncHandler(async (req, res) => {
 
   const normalizedEmail = String(email).trim().toLowerCase();
 
-  // Fetch user along with password and 2FA secrets
   const user = await User.findOne({ email: normalizedEmail }).select(
     '+password +twoFactorSecret +twoFactorRecoveryCodes'
   );
@@ -48,7 +101,6 @@ export const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, GENERIC_ERROR);
   }
 
-  // Account lock check
   if (user.isLocked && typeof user.isLocked === 'function' && user.isLocked()) {
     throw new ApiError(423, 'Account is temporarily locked due to repeated failed attempts. Please try again later.');
   }
@@ -58,19 +110,16 @@ export const login = asyncHandler(async (req, res) => {
   if (!isPasswordValid) {
     user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
     if (user.failedLoginAttempts >= 5) {
-      user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 mins lock
+      user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
     }
     await user.save();
     throw new ApiError(401, GENERIC_ERROR);
   }
 
-  // Credentials are valid: Reset failed counter and lock state
   user.failedLoginAttempts = 0;
   user.lockUntil = null;
   await user.save();
 
-  // 2FA Evaluation Logic:
-  // Requires 2FA ONLY IF user has actually enrolled a secret OR role has configured secret.
   const hasEnrolledSecret = Boolean(user.twoFactorSecret);
   const requires2FA = (user.isTwoFactorEnabled || MANDATORY_2FA_ROLES.includes(user.role)) && hasEnrolledSecret;
 
@@ -85,7 +134,10 @@ export const login = asyncHandler(async (req, res) => {
     );
   }
 
-  // Direct login when 2FA is not enrolled or disabled
+  // ✅ Attach resolved dynamic permissions to user object before generating tokens
+  const permissions = await resolveUserPermissionsForToken(user);
+  user.permissions = permissions;
+
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
@@ -93,8 +145,8 @@ export const login = asyncHandler(async (req, res) => {
   user.refreshTokens.push({ tokenHash: hashToken(refreshToken) });
   await user.save();
 
-  // Sanitize user output
   const userResponse = user.toObject();
+  userResponse.permissions = permissions;
   delete userResponse.password;
   delete userResponse.twoFactorSecret;
   delete userResponse.twoFactorRecoveryCodes;
@@ -213,7 +265,6 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
 
   let isValid = false;
 
-  // 1. Verify Active TOTP Code
   if (code && user.twoFactorSecret) {
     isValid = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
@@ -223,7 +274,6 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
     });
   }
 
-  // 2. Fallback: Verify Backup Recovery Code
   if (!isValid && recoveryCode) {
     const hashedCode = crypto
       .createHash('sha256')
@@ -245,7 +295,9 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid 2FA code or recovery code.');
   }
 
-  // Issue final Access & Refresh Tokens
+  const permissions = await resolveUserPermissionsForToken(user);
+  user.permissions = permissions;
+
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
@@ -254,6 +306,7 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
   await user.save();
 
   const userResponse = user.toObject();
+  userResponse.permissions = permissions;
   delete userResponse.password;
   delete userResponse.twoFactorSecret;
   delete userResponse.twoFactorRecoveryCodes;
@@ -304,6 +357,9 @@ export const refreshToken = asyncHandler(async (req, res) => {
   }
 
   user.refreshTokens.splice(tokenIndex, 1);
+
+  const permissions = await resolveUserPermissionsForToken(user);
+  user.permissions = permissions;
 
   const newAccessToken = generateAccessToken(user);
   const newRefreshToken = generateRefreshToken(user);
@@ -375,13 +431,16 @@ export const registerDeviceToken = asyncHandler(async (req, res) => {
  * @access  Private (verifyJWT)
  */
 export const getCurrentUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user?._id)
+  let user = await User.findById(req.user?._id)
     .populate('companyId', 'name slug country currency')
     .lean();
 
   if (!user) {
     throw new ApiError(404, 'Active user session not found.');
   }
+
+  const permissions = await resolveUserPermissionsForToken(user);
+  user.permissions = permissions;
 
   delete user.password;
   delete user.twoFactorSecret;

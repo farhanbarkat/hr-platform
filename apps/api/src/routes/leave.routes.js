@@ -24,7 +24,7 @@ import {
 
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
-import { requirePermission, requireRole } from '../middlewares/rbac.middleware.js';
+import { requireAnyPermission, requirePermission } from '../middlewares/rbac.middleware.js';
 import { requireEntitlement } from '../middlewares/entitlement.middleware.js';
 import { PERMISSIONS } from '../config/permissions.js';
 
@@ -34,16 +34,8 @@ const router = Router();
 router.use(verifyJWT);
 router.use(tenantMiddleware);
 
-// Helper Guard: Company Admin & Super Admin bypass permission bottlenecks
-const allowAdminOrPermission = (permissionKey) => {
-  return (req, res, next) => {
-    const role = req.user?.role;
-    if (['COMPANY_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(role)) {
-      return next();
-    }
-    return requirePermission(permissionKey)(req, res, next);
-  };
-};
+// Leave access is capability-driven; admin bypasses are handled by the RBAC service.
+const allowAdminOrPermission = (permissionKey) => requirePermission(permissionKey);
 
 // Helper Guard: Admin bypass for Entitlement lock on administrative views
 const allowAdminOrEntitlement = (entitlementKey) => {
@@ -85,20 +77,7 @@ router.get(
 // FIX: Admins can view approval queue even if tenant plan is missing 'mod_leave_complex'
 router.get(
   '/pending-approvals',
-  (req, res, next) => {
-    const role = req.user?.role;
-    const userPermissions = req.user?.permissions || [];
-    
-    // Allow Company/Super Admin or users holding team view permissions
-    if (
-      ['COMPANY_ADMIN', 'SUPER_ADMIN', 'ADMIN', 'HR', 'HR_MANAGER'].includes(role) ||
-      userPermissions.includes(PERMISSIONS.LEAVE.VIEW_TEAM) ||
-      userPermissions.includes(PERMISSIONS.LEAVE.READ)
-    ) {
-      return next();
-    }
-    return res.status(403).json({ success: false, message: 'Forbidden: Insufficient permissions.' });
-  },
+  requireAnyPermission([PERMISSIONS.LEAVE.VIEW_TEAM, PERMISSIONS.LEAVE.READ]),
   getPendingApprovals
 );
 
@@ -133,13 +112,14 @@ router.patch(
 // ESS Full Leave History (Self-Service)
 router.get(
   '/my-history',
+  allowAdminOrPermission(PERMISSIONS.LEAVE.VIEW_OWN),
   getMyLeaveHistory
 );
 
 // PRD Turnaround Analytics (Company Admin / HR with Matrix Gate)
 router.get(
   '/analytics/turnaround-time',
-  requireRole(['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR', 'HR_MANAGER']),
+  requirePermission(PERMISSIONS.LEAVE.READ),
   allowAdminOrEntitlement('mod_leave_complex'),
   getLeaveApprovalTurnaroundAnalytics
 );
@@ -147,14 +127,7 @@ router.get(
 // Detail View History Timeline
 router.get(
   '/requests/:id/timeline',
-  requireRole([
-    'COMPANY_ADMIN',
-    'SUPER_ADMIN',
-    'HR',
-    'HR_MANAGER',
-    'MANAGER',
-    'EMPLOYEE'
-  ]),
+  requirePermission(PERMISSIONS.LEAVE.READ),
   allowAdminOrEntitlement('mod_leave_complex'),
   getLeaveRequestTimeline
 );

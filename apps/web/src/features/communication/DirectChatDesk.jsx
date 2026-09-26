@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSocket } from '../../hooks/useSocket.js';
+import { PERMISSIONS } from '../../config/permissions.js';
 
 export default function DirectChatDesk() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const canReadEmployees = hasPermission(PERMISSIONS.EMPLOYEE.READ);
   const socketRef = useSocket();
 
   const [conversations, setConversations] = useState([]);
@@ -34,7 +36,12 @@ export default function DirectChatDesk() {
   }, []);
 
   // 2. Fetch Directory for new conversations
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
+    if (!canReadEmployees) {
+      setEmployees([]);
+      return;
+    }
+
     try {
       const res = await apiClient.get('/employees?limit=200');
       const list = res.data?.data?.employees || res.data?.data || [];
@@ -44,7 +51,7 @@ export default function DirectChatDesk() {
     } catch (err) {
       console.warn('Directory fetch failed:', err);
     }
-  };
+  }, [canReadEmployees, user?._id]);
 
   // 3. Select Conversation & Mark as Read
   const selectConversation = async (peer) => {
@@ -68,9 +75,13 @@ export default function DirectChatDesk() {
   };
 
   useEffect(() => {
-    fetchConversations();
-    fetchEmployees();
-  }, [fetchConversations]);
+    const loadDesk = window.setTimeout(() => {
+      fetchConversations();
+      if (canReadEmployees) fetchEmployees();
+    }, 0);
+
+    return () => window.clearTimeout(loadDesk);
+  }, [canReadEmployees, fetchConversations, fetchEmployees]);
 
   useEffect(() => {
     scrollToBottom();
@@ -157,12 +168,14 @@ export default function DirectChatDesk() {
             </span>
             <h2 className="text-sm font-bold text-[#16233B]">Direct Communications</h2>
           </div>
-          <button
-            onClick={() => setIsNewChatOpen(!isNewChatOpen)}
-            className="px-2.5 py-1 bg-[#8C5D17] hover:bg-[#784F14] text-white text-[11px] font-mono font-bold rounded cursor-pointer transition-all shadow-2xs"
-          >
-            {isNewChatOpen ? '✕ Close' : '+ New Chat'}
-          </button>
+          {canReadEmployees && (
+            <button
+              onClick={() => setIsNewChatOpen(!isNewChatOpen)}
+              className="px-2.5 py-1 bg-[#8C5D17] hover:bg-[#784F14] text-white text-[11px] font-mono font-bold rounded cursor-pointer transition-all shadow-2xs"
+            >
+              {isNewChatOpen ? '✕ Close' : '+ New Chat'}
+            </button>
+          )}
         </div>
 
         {/* Search */}

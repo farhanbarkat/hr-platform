@@ -25,23 +25,7 @@ router.get(
 // 2. Team Creation (Admin, HR, Manager)
 router.post(
   '/',
-  (req, res, next) => {
-    const allowedRoles = ['COMPANY_ADMIN', 'SUPER_ADMIN', 'HR', 'MANAGER'];
-    const userRole = typeof req.user.role === 'object' ? req.user.role.name : req.user.role;
-    
-    // Check role OR check permission
-    const hasRole = allowedRoles.includes(userRole);
-    const hasPerm = req.user.permissions?.includes('team.create') || req.user.permissions?.includes('company.configure');
-    
-    if (!hasRole && !hasPerm) {
-      return res.status(403).json({
-        statusCode: 403,
-        message: 'Forbidden: Only Company Admin, HR, or Managers can create teams.',
-        success: false,
-      });
-    }
-    next();
-  },
+  requirePermission(PERMISSIONS.TEAM.CREATE),
   createTeam
 );
 

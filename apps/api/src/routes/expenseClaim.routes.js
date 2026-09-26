@@ -5,8 +5,9 @@ import {
   getExpenseApprovalQueue,
   reviewExpenseClaim,
 } from '../controllers/expenseClaim.controller.js';
-import { verifyJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
 
 const router = Router();
 
@@ -20,13 +21,13 @@ router.get('/my-claims', getMyExpenseClaims);
 // HR / Manager Approval Queue Routes
 router.get(
   '/queue',
-  authorizeRoles('HR', 'ADMIN', 'COMPANY_ADMIN', 'MANAGER'),
+  requirePermission('finance.approve_expense'),
   getExpenseApprovalQueue
 );
 
 router.patch(
   '/:id/action',
-  authorizeRoles('HR', 'ADMIN', 'COMPANY_ADMIN', 'MANAGER'),
+  requirePermission('finance.approve_expense'),
   reviewExpenseClaim
 );
 

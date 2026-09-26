@@ -105,13 +105,54 @@ export const updateCompanySettings = asyncHandler(async (req, res) => {
   }
 
   const companyId = String(rawId);
-  const { settings, name, currency, defaultTimezone } = req.body;
+  const {
+    settings,
+    name,
+    currency,
+    defaultTimezone,
+    worksiteLocation,
+    allowedRadiusMeters,
+  } = req.body;
 
   const updateFields = {};
 
   if (name) updateFields.name = name;
   if (currency) updateFields.currency = currency;
   if (defaultTimezone) updateFields.defaultTimezone = defaultTimezone;
+
+  if (worksiteLocation !== undefined) {
+    if (!worksiteLocation || typeof worksiteLocation !== 'object') {
+      throw new ApiError(400, 'Worksite location must be an object.');
+    }
+
+    const { latitude, longitude, address } = worksiteLocation;
+    const latitudeNumber = Number(latitude);
+    const longitudeNumber = Number(longitude);
+
+    if (!Number.isFinite(latitudeNumber) || latitudeNumber < -90 || latitudeNumber > 90) {
+      throw new ApiError(400, 'Worksite latitude must be between -90 and 90.');
+    }
+
+    if (!Number.isFinite(longitudeNumber) || longitudeNumber < -180 || longitudeNumber > 180) {
+      throw new ApiError(400, 'Worksite longitude must be between -180 and 180.');
+    }
+
+    if (typeof address !== 'string' || !address.trim()) {
+      throw new ApiError(400, 'Worksite address is required.');
+    }
+
+    updateFields['worksiteLocation.latitude'] = latitudeNumber;
+    updateFields['worksiteLocation.longitude'] = longitudeNumber;
+    updateFields['worksiteLocation.address'] = address.trim();
+  }
+
+  if (allowedRadiusMeters !== undefined) {
+    const radius = Number(allowedRadiusMeters);
+    if (!Number.isFinite(radius) || radius < 1 || radius > 100000) {
+      throw new ApiError(400, 'Allowed geofence radius must be between 1 and 100000 meters.');
+    }
+    updateFields.allowedRadiusMeters = radius;
+  }
 
   // Support comprehensive settings payload without wiping existing keys
   if (settings && typeof settings === 'object') {
@@ -124,6 +165,14 @@ export const updateCompanySettings = asyncHandler(async (req, res) => {
         updateFields[`settings.${sectionKey}`] = sectionVal;
       }
     }
+  }
+
+  const redisQueuePrefix = settings?.attendance?.redisQueuePrefix;
+  if (redisQueuePrefix !== undefined) {
+    if (typeof redisQueuePrefix !== 'string' || !/^[a-zA-Z0-9:_-]{1,100}$/.test(redisQueuePrefix)) {
+      throw new ApiError(400, 'Attendance Redis queue prefix may contain only letters, numbers, :, _, and -.');
+    }
+    updateFields['settings.attendance.redisQueuePrefix'] = redisQueuePrefix;
   }
 
   const company = await Company.findByIdAndUpdate(
