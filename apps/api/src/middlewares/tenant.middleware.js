@@ -23,9 +23,13 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // 2. Resolve target company ID from user context or Super-Admin impersonation header
-  const resolvedCompanyId =
-    req.headers['x-impersonated-company-id'] || req.user.companyId;
+  // 2. Only Super Admins may select a tenant explicitly for impersonation.
+  const impersonatedCompanyId = req.headers['x-impersonated-company-id'];
+  if (impersonatedCompanyId && req.user.role !== 'SUPER_ADMIN') {
+    throw new ApiError(403, 'Access Denied: Tenant impersonation is restricted.');
+  }
+
+  const resolvedCompanyId = impersonatedCompanyId || req.user.companyId;
 
   if (!resolvedCompanyId) {
     throw new ApiError(403, 'Access Denied: Missing tenant context.');

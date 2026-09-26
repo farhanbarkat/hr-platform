@@ -7,7 +7,8 @@ import {
   getExpiringDocuments,
 } from '../controllers/document.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { requireRole } from '../middlewares/rbac.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
 
 const router = Router();
@@ -28,6 +29,6 @@ router.get('/:id/download-url', getDownloadUrl);
 router.get('/employee/:employeeId', getEmployeeDocuments);
 
 // Admin-only: Query Expiring Documents for reminders
-router.get('/expiring', requireRole('COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'), getExpiringDocuments);
+router.get('/expiring', requirePermission(PERMISSIONS.DOCUMENT.READ), getExpiringDocuments);
 
 export default router;

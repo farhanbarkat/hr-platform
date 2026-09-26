@@ -46,20 +46,26 @@ const companySchema = new mongoose.Schema(
     worksiteLocation: {
       latitude: {
         type: Number,
+        min: -90,
+        max: 90,
         default: 31.5204,
       },
       longitude: {
         type: Number,
+        min: -180,
+        max: 180,
         default: 74.3587,
       },
       address: {
         type: String,
+        trim: true,
         default: 'Main Office HQ',
       },
     },
 
     allowedRadiusMeters: {
       type: Number,
+      min: 1,
       default: 150,
     },
 
@@ -126,6 +132,13 @@ const companySchema = new mongoose.Schema(
         earlyCheckoutAlertThresholdMinutes: {
           type: Number,
           default: 30,
+        },
+
+        redisQueuePrefix: {
+          type: String,
+          trim: true,
+          default: 'hr-platform:attendance',
+          maxlength: 100,
         },
       },
 

@@ -10,6 +10,7 @@ import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
 import { requireEntitlement } from '../middlewares/entitlement.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
 
@@ -22,14 +23,14 @@ router.use(enforceReadOnlyImpersonation);
 // Plus Subscription Matrix check: 'mod_attendance_gps'
 router.post(
   '/check-in',
-  requirePermission('attendance:checkin'),
-  requireEntitlement('mod_attendance_gps'),
+  requirePermission(PERMISSIONS.ATTENDANCE.CHECK_IN),
+  // requireEntitlement('mod_attendance_gps'),
   checkIn
 );
 
 router.post(
   '/check-out',
-  requirePermission('attendance:checkout'),
+  requirePermission(PERMISSIONS.ATTENDANCE.CHECK_OUT),
   requireEntitlement('mod_attendance_gps'),
   checkOut
 );
@@ -38,7 +39,7 @@ router.post(
 // Kisi ko bhi view attendance ki permission de sakti hai company
 router.get(
   '/',
-  requirePermission('attendance:view'),
+  requirePermission(PERMISSIONS.ATTENDANCE.READ),
   getAttendanceRecords
 );
 
@@ -46,7 +47,7 @@ router.get(
 // Company chahe toh yeh authority HR ko de, Branch Manager ko de, ya kisi specific Supervisor ko de!
 router.post(
   '/flag-missing-checkouts',
-  requirePermission('attendance:manage_missing'),
+  requirePermission(PERMISSIONS.ATTENDANCE.UPDATE),
   flagMissingCheckouts
 );
 

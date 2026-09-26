@@ -39,7 +39,12 @@ export const requirePermission = (permission, options = {}) => {
     }
 
     // Check permission
-    const hasPerm = await rbacService.hasPermission(user, permission);
+    const hasPerm = await rbacService.hasPermission(
+      req.companyId && req.companyId !== user.companyId
+        ? { ...user, companyId: req.companyId }
+        : user,
+      permission
+    );
 
     // Prepare log data
     const logData = {

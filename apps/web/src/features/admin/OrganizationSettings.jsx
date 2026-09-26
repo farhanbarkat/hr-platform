@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
+import WorksiteMapPicker from './WorksiteMapPicker.jsx';
 
 export default function OrganizationSettings() {
-  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'tax' | 'hours' | 'announcements'
+  const [activeTab, setActiveTab] = useState('templates'); // 'templates' | 'tax' | 'hours' | 'announcements' | 'location'
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState('');
@@ -50,6 +51,14 @@ export default function OrganizationSettings() {
     targetAudience: 'all',
     targetDepartmentId: '',
     body: '',
+  });
+
+  const [worksiteSettings, setWorksiteSettings] = useState({
+    address: '',
+    latitude: 31.5204,
+    longitude: 74.3587,
+    allowedRadiusMeters: 150,
+    redisQueuePrefix: 'hr-platform:attendance',
   });
 
   // 1. Load Letter Templates
@@ -150,6 +159,25 @@ export default function OrganizationSettings() {
     }
   }, []);
 
+  const loadWorksiteSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get('/companies/me');
+      const company = res.data?.data || {};
+      setWorksiteSettings({
+        address: company.worksiteLocation?.address || '',
+        latitude: company.worksiteLocation?.latitude ?? 31.5204,
+        longitude: company.worksiteLocation?.longitude ?? 74.3587,
+        allowedRadiusMeters: company.allowedRadiusMeters ?? 150,
+        redisQueuePrefix: company.settings?.attendance?.redisQueuePrefix || 'hr-platform:attendance',
+      });
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Failed to load worksite settings.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setActionError('');
     setActionStatus('');
@@ -157,7 +185,8 @@ export default function OrganizationSettings() {
     if (activeTab === 'tax') loadTaxSlabs();
     if (activeTab === 'hours') loadOperatingParams();
     if (activeTab === 'announcements') loadAnnouncements();
-  }, [activeTab, loadTemplates, loadTaxSlabs, loadOperatingParams, loadAnnouncements]);
+    if (activeTab === 'location') loadWorksiteSettings();
+  }, [activeTab, loadTemplates, loadTaxSlabs, loadOperatingParams, loadAnnouncements, loadWorksiteSettings]);
 
   // -------------------------------------------------------------
   // WORD-STYLE RICH TEXT COMMAND DISPATCHER
@@ -342,6 +371,33 @@ export default function OrganizationSettings() {
     }
   };
 
+  const handleSaveWorksiteSettings = async (event) => {
+    event?.preventDefault();
+    try {
+      setActionLoading(true);
+      setActionError('');
+      setActionStatus('');
+      await apiClient.put('/companies/settings', {
+        worksiteLocation: {
+          address: worksiteSettings.address.trim(),
+          latitude: Number(worksiteSettings.latitude),
+          longitude: Number(worksiteSettings.longitude),
+        },
+        allowedRadiusMeters: Number(worksiteSettings.allowedRadiusMeters),
+        settings: {
+          attendance: {
+            redisQueuePrefix: worksiteSettings.redisQueuePrefix.trim(),
+          },
+        },
+      });
+      setActionStatus('Worksite geofence and attendance queue settings updated successfully.');
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Failed to update worksite settings.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Announcements Handlers
   const handlePublishAnnouncement = async (e) => {
     e.preventDefault();
@@ -438,6 +494,7 @@ export default function OrganizationSettings() {
               if (activeTab === 'tax') loadTaxSlabs();
               if (activeTab === 'hours') loadOperatingParams();
               if (activeTab === 'announcements') loadAnnouncements();
+              if (activeTab === 'location') loadWorksiteSettings();
             }}
             className="px-3.5 py-1.5 bg-[#FAF8F5] hover:bg-[#F2EFE9] border border-[#D5CEC2] rounded text-[#546274] flex items-center gap-1.5 cursor-pointer transition-all"
           >
@@ -449,6 +506,7 @@ export default function OrganizationSettings() {
               if (activeTab === 'templates') handleSaveTemplate();
               if (activeTab === 'tax') handleSaveSlabs();
               if (activeTab === 'hours') handleSaveOperatingParameters();
+              if (activeTab === 'location') handleSaveWorksiteSettings();
             }}
             disabled={actionLoading}
             className="px-4 py-1.5 bg-[#8C5D17] hover:bg-[#784F14] text-white rounded font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all disabled:opacity-50"
@@ -520,7 +578,150 @@ export default function OrganizationSettings() {
           <span>📢</span>
           <span>Broadcast Announcements Feed</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('location')}
+          className={`pb-2.5 flex items-center gap-2 cursor-pointer transition-all ${
+            activeTab === 'location'
+              ? 'border-b-2 border-[#8C5D17] text-[#111C2E] font-bold'
+              : 'text-[#728294] hover:text-[#111C2E]'
+          }`}
+        >
+          <span>⌖</span>
+          <span>Worksite &amp; Geofence Location</span>
+        </button>
       </div>
+
+      {activeTab === 'location' && (
+        <form onSubmit={handleSaveWorksiteSettings} className="bg-white rounded-lg border border-[#E3DED4] p-6 space-y-6 shadow-xs">
+          <div className="space-y-1 border-b border-[#F4F1EA] pb-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-[#111C2E]">
+              <span className="w-5 h-5 rounded-full bg-[#FAF3E8] border border-[#E8D4B5] text-[#8C5D17] flex items-center justify-center text-xs">
+                ⌖
+              </span>
+              <h2>Worksite &amp; Geofence Location</h2>
+            </div>
+            <p className="text-[11px] text-[#69788A]">
+              Configure the office coordinates used for GPS attendance validation and the queue namespace used by attendance workers.
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="py-10 text-center text-[#728294] font-mono text-xs">
+              Loading company worksite settings...
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <label htmlFor="worksite-address" className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
+                  OFFICE BUILDING / LOCATION NAME
+                </label>
+                <input
+                  id="worksite-address"
+                  type="text"
+                  required
+                  value={worksiteSettings.address}
+                  onChange={(e) => setWorksiteSettings({ ...worksiteSettings, address: e.target.value })}
+                  placeholder="Main Office HQ, 12th Floor, Lahore"
+                  className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs text-[#111C2E] outline-none focus:border-[#8C5D17]"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-[#728294] font-bold block">OFFICE MAP LOCATION</span>
+                    <p className="text-[10.5px] text-[#69788A]">The marker and boundary update as you choose a location or radius.</p>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#8C5D17] whitespace-nowrap">OpenStreetMap</span>
+                </div>
+                <WorksiteMapPicker
+                  latitude={worksiteSettings.latitude}
+                  longitude={worksiteSettings.longitude}
+                  radius={worksiteSettings.allowedRadiusMeters}
+                  onChange={([latitude, longitude]) => setWorksiteSettings({ ...worksiteSettings, latitude, longitude })}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-1.5">
+                  <label htmlFor="worksite-latitude" className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
+                    SELECTED LATITUDE
+                  </label>
+                  <input
+                    id="worksite-latitude"
+                    type="text"
+                    readOnly
+                    value={Number(worksiteSettings.latitude).toFixed(6)}
+                    className="w-full bg-[#F2EFE9] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#546274] outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="worksite-longitude" className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
+                    SELECTED LONGITUDE
+                  </label>
+                  <input
+                    id="worksite-longitude"
+                    type="text"
+                    readOnly
+                    value={Number(worksiteSettings.longitude).toFixed(6)}
+                    className="w-full bg-[#F2EFE9] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#546274] outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="allowed-radius" className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
+                    ALLOWED GEOFENCE RADIUS
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="allowed-radius"
+                      type="number"
+                      required
+                      min="1"
+                      max="100000"
+                      value={worksiteSettings.allowedRadiusMeters}
+                      onChange={(e) => setWorksiteSettings({ ...worksiteSettings, allowedRadiusMeters: e.target.value })}
+                      className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+                    />
+                    <span className="text-xs font-mono text-[#728294] whitespace-nowrap">Meters</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="redis-queue-prefix" className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
+                  ATTENDANCE REDIS / QUEUE IDENTIFIER
+                </label>
+                <input
+                  id="redis-queue-prefix"
+                  type="text"
+                  required
+                  maxLength="100"
+                  pattern="[a-zA-Z0-9:_-]+"
+                  value={worksiteSettings.redisQueuePrefix}
+                  onChange={(e) => setWorksiteSettings({ ...worksiteSettings, redisQueuePrefix: e.target.value })}
+                  placeholder="hr-platform:attendance"
+                  className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+                />
+                <p className="text-[10.5px] text-[#69788A]">Use letters, numbers, colon, underscore, or hyphen only.</p>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-5 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white rounded font-mono font-semibold text-xs flex items-center gap-2 cursor-pointer shadow-xs transition-all disabled:opacity-50"
+                >
+                  <span>💾</span>
+                  <span>{actionLoading ? 'Saving...' : 'Save Worksite Settings'}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+      )}
 
       {/* ============================================================= */}
       {/* TAB 1: MICROSOFT WORD-STYLE LETTER TEMPLATES DESIGNER         */}

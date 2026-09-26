@@ -8,7 +8,8 @@ import {
   updateMyProfile,
 } from '../controllers/employee.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { requireRole } from '../middlewares/rbac.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
 import { uploadCsv } from '../middlewares/upload.middleware.js';
 import {
@@ -89,7 +90,7 @@ router.patch('/me/profile', updateMyProfile);
  */
 router.post(
   '/bulk-import',
-  requireRole('COMPANY_ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'),
+  requirePermission(PERMISSIONS.EMPLOYEE.CREATE),
   uploadCsv.single('file'),
   bulkImportEmployees
 );
@@ -117,7 +118,7 @@ router.post(
  */
 router.get(
   '/bulk-import/jobs/:jobId',
-  requireRole('COMPANY_ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'),
+  requirePermission(PERMISSIONS.EMPLOYEE.CREATE),
   getImportJobStatus
 );
 
@@ -191,8 +192,8 @@ router.get(
  *         description: Duplicate email or employee code
  */
 router.route('/')
-  .get(requireRole('COMPANY_ADMIN', 'HR', 'HR_MANAGER', 'MANAGER', 'SUPER_ADMIN'), getEmployees)
-  .post(requireRole('COMPANY_ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'), createEmployee);
+  .get(requirePermission(PERMISSIONS.EMPLOYEE.READ), getEmployees)
+  .post(requirePermission(PERMISSIONS.EMPLOYEE.CREATE), createEmployee);
 
 // --- Dynamic Parameterized Routes (MUST BE AT THE END) ---
 
@@ -235,7 +236,7 @@ router.route('/')
  *         description: Employee not found
  */
 router.route('/:id')
-  .get(requireRole('COMPANY_ADMIN', 'HR', 'HR_MANAGER', 'MANAGER', 'SUPER_ADMIN'), getEmployeeById)
-  .put(requireRole('COMPANY_ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'), updateEmployee);
+  .get(requirePermission(PERMISSIONS.EMPLOYEE.READ), getEmployeeById)
+  .put(requirePermission(PERMISSIONS.EMPLOYEE.UPDATE), updateEmployee);
 
 export default router;

@@ -100,8 +100,8 @@ export class PayslipPdfService {
     });
   }
 
-  static async generateAndUploadPayslip(payslipId) {
-    const payslip = await Payslip.findById(payslipId)
+  static async generateAndUploadPayslip(payslipId, companyId) {
+    const payslip = await Payslip.findOne({ _id: payslipId, companyId })
       .populate('employeeId')
       .populate('companyId');
 
@@ -157,8 +157,8 @@ export class PayslipPdfService {
     return updatedPayslip;
   }
 
-  static async getDownloadUrl(payslipId, user) {
-    const payslip = await Payslip.findById(payslipId);
+  static async getDownloadUrl(payslipId, user, companyId) {
+    const payslip = await Payslip.findOne({ _id: payslipId, companyId });
     if (!payslip) throw new ApiError(404, 'Payslip not found');
 
     const isOwner = user.employeeId && payslip.employeeId.toString() === user.employeeId.toString();

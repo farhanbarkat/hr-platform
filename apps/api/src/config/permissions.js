@@ -112,6 +112,20 @@ export const PERMISSIONS = {
     MANAGE: 'calendar.manage',
   },
 
+  DEPARTMENT: {
+    READ: 'department.read',
+    CREATE: 'department.create',
+    UPDATE: 'department.update',
+    DELETE: 'department.delete',
+    REASSIGN: 'department.reassign',
+  },
+
+  TEAM: {
+    READ: 'team.read',
+    CREATE: 'team.create',
+    UPDATE: 'team.update',
+  },
+
   TASKS: {
     READ: 'tasks.read',
     CREATE: 'tasks.create',

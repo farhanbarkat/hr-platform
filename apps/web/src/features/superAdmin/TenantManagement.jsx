@@ -17,13 +17,14 @@ export default function TenantManagement() {
   const [formError, setFormError] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
 
-  // Form matching image fields exactly
+  // Form matching backend controller exactly
   const [formData, setFormData] = useState({
     legalName: '',
     slug: '',
     baseCurrency: 'USD',
     defaultTimezone: 'America/New_York',
-    adminFullName: '',
+    adminFirstName: '',
+    adminLastName: '',
     adminEmail: '',
     subscriptionTier: 'BUSINESS',
   });
@@ -76,7 +77,7 @@ export default function TenantManagement() {
     fetchTenants();
   }, [fetchTenants]);
 
-  // 2. Submit Provisioning Form
+  // 2. Submit Provisioning Form (Fixed Payload for backend compatibility)
   const handleProvisionTenant = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -84,16 +85,15 @@ export default function TenantManagement() {
     setSubmitting(true);
 
     try {
-      // Backend payload structure matching standard model
       const payload = {
         name: formData.legalName.trim(),
         slug: formData.slug.trim(),
         currency: formData.baseCurrency,
         timezone: formData.defaultTimezone,
-        adminName: formData.adminFullName.trim(),
+        adminFirstName: formData.adminFirstName.trim(),
+        adminLastName: formData.adminLastName.trim() || 'Admin',
         adminEmail: formData.adminEmail.trim().toLowerCase(),
         plan: formData.subscriptionTier,
-        tier: formData.subscriptionTier,
       };
 
       await apiClient.post('/super-admin/companies', payload);
@@ -105,7 +105,8 @@ export default function TenantManagement() {
         slug: '',
         baseCurrency: 'USD',
         defaultTimezone: 'America/New_York',
-        adminFullName: '',
+        adminFirstName: '',
+        adminLastName: '',
         adminEmail: '',
         subscriptionTier: 'BUSINESS',
       });
@@ -303,13 +304,10 @@ export default function TenantManagement() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* MODAL: PROVISION NEW TENANT ORGANIZATION (EXACT MATCH TO ATTACHED IMAGE)  */}
-      {/* ========================================================================= */}
+      {/* MODAL: PROVISION NEW TENANT ORGANIZATION */}
       {showProvisionModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-lg border border-[#D8D3C7] shadow-2xl w-full max-w-[560px] overflow-hidden">
-            {/* Modal Header */}
             <div className="p-5 px-6 border-b border-[#EAE7DF] bg-[#FAF9F6] flex justify-between items-center">
               <div className="flex items-center gap-2.5">
                 <span className="text-base">🏢</span>
@@ -325,7 +323,6 @@ export default function TenantManagement() {
               </button>
             </div>
 
-            {/* Modal Body / Form */}
             <form onSubmit={handleProvisionTenant} className="p-6 space-y-5 text-xs">
               {formError && (
                 <div className="p-3 bg-[#B3432E]/10 border border-[#B3432E]/30 text-[#B3432E] rounded font-mono text-[11px]">
@@ -333,7 +330,6 @@ export default function TenantManagement() {
                 </div>
               )}
 
-              {/* Row 1: Legal Name & Tenant Slug */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
@@ -369,7 +365,6 @@ export default function TenantManagement() {
                 </div>
               </div>
 
-              {/* Row 2: Base Currency & Default Timezone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
@@ -406,38 +401,51 @@ export default function TenantManagement() {
                 </div>
               </div>
 
-              {/* Row 3: Admin Full Name & Admin Email Address */}
+              {/* Updated Admin First Name & Last Name inputs matching backend */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
-                    ADMIN FULL NAME
+                    ADMIN FIRST NAME
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Jane Doe"
-                    value={formData.adminFullName}
-                    onChange={(e) => setFormData({ ...formData, adminFullName: e.target.value })}
+                    placeholder="Jane"
+                    value={formData.adminFirstName}
+                    onChange={(e) => setFormData({ ...formData, adminFirstName: e.target.value })}
                     className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs text-[#16233B] outline-none focus:border-[#B9812E]"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
-                    ADMIN EMAIL ADDRESS
+                    ADMIN LAST NAME
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
-                    placeholder="admin@technova.com"
-                    value={formData.adminEmail}
-                    onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-mono text-[#16233B] outline-none focus:border-[#B9812E]"
+                    placeholder="Doe"
+                    value={formData.adminLastName}
+                    onChange={(e) => setFormData({ ...formData, adminLastName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs text-[#16233B] outline-none focus:border-[#B9812E]"
                   />
                 </div>
               </div>
 
-              {/* Row 4: Subscription Tier */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                  ADMIN EMAIL ADDRESS
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@technova.com"
+                  value={formData.adminEmail}
+                  onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-mono text-[#16233B] outline-none focus:border-[#B9812E]"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
                   SUBSCRIPTION TIER
@@ -453,7 +461,6 @@ export default function TenantManagement() {
                 </select>
               </div>
 
-              {/* Modal Actions */}
               <div className="pt-4 flex justify-end gap-3 border-t border-[#EAE7DF]">
                 <button
                   type="button"

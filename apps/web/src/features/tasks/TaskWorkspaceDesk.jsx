@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { PERMISSIONS } from '../../config/permissions.js';
 import CreateTaskModal from './CreateTaskModal.jsx';
 import TaskAttachmentDrawer from './TaskAttachmentDrawer.jsx';
 
 export default function TaskWorkspaceDesk() {
-  const { user, isSuperAdmin, isCompanyAdmin } = useAuth();
+  const { hasPermission } = useAuth();
+  const canReadTasks = hasPermission(PERMISSIONS.TASK.READ);
+  const canCreateTasks = hasPermission(PERMISSIONS.TASK.CREATE);
+  const canUpdateTasks = hasPermission(PERMISSIONS.TASK.UPDATE);
 
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
 
@@ -23,21 +26,25 @@ export default function TaskWorkspaceDesk() {
 
   // 1. Fetch Board Tasks
   const fetchTasks = useCallback(async () => {
+    if (!canReadTasks) {
+      setTasks([]);
+      return;
+    }
+
     try {
-      setLoading(true);
       let query = '/tasks';
       if (statusFilter) query += `?status=${statusFilter}`;
       const res = await apiClient.get(query);
       setTasks(res.data?.data || []);
     } catch (err) {
       console.warn('Failed to fetch tasks:', err);
-    } finally {
-      setLoading(false);
     }
-  }, [statusFilter]);
+  }, [canReadTasks, statusFilter]);
 
   // 2. Fetch Active Stopwatch
   const fetchActiveTimer = useCallback(async () => {
+    if (!canReadTasks) return;
+
     try {
       const res = await apiClient.get('/task-time-logs/active');
       const timer = res.data?.data?.activeTimer || null;
@@ -50,12 +57,18 @@ export default function TaskWorkspaceDesk() {
     } catch (err) {
       console.warn('Timer check error:', err);
     }
-  }, []);
+  }, [canReadTasks]);
 
   useEffect(() => {
-    fetchTasks();
-    fetchActiveTimer();
-  }, [fetchTasks, fetchActiveTimer]);
+    if (!canReadTasks) return undefined;
+
+    const loadTimer = window.setTimeout(() => {
+      fetchTasks();
+      fetchActiveTimer();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [canReadTasks, fetchTasks, fetchActiveTimer]);
 
   // Live Timer Ticker
   useEffect(() => {
@@ -64,17 +77,17 @@ export default function TaskWorkspaceDesk() {
       interval = setInterval(() => {
         setTimerSeconds((prev) => prev + 1);
       }, 1000);
-    } else {
-      setTimerSeconds(0);
     }
     return () => clearInterval(interval);
   }, [activeTimer]);
 
   // 3. Start Timer on Task
   const handleStartTimer = async (taskId) => {
+    if (!canUpdateTasks) return;
+
     try {
       setFeedback(null);
-      const res = await apiClient.post('/task-time-logs/start', { taskId });
+      await apiClient.post('/task-time-logs/start', { taskId });
       setFeedback({ text: 'Timer active and tracking duration.', ok: true });
       fetchActiveTimer();
     } catch (err) {
@@ -87,7 +100,7 @@ export default function TaskWorkspaceDesk() {
 
   // 4. Stop Active Timer
   const handleStopTimer = async () => {
-    if (!activeTimer) return;
+    if (!activeTimer || !canUpdateTasks) return;
     try {
       setFeedback(null);
       await apiClient.post('/task-time-logs/stop', {
@@ -106,6 +119,8 @@ export default function TaskWorkspaceDesk() {
 
   // 5. Update Task Status (Kanban Columns)
   const handleStatusChange = async (taskId, nextStatus) => {
+    if (!canUpdateTasks) return;
+
     try {
       await apiClient.patch(`/tasks/${taskId}/status`, { status: nextStatus });
       fetchTasks();
@@ -137,6 +152,14 @@ export default function TaskWorkspaceDesk() {
     { id: 'COMPLETED', label: 'Completed / Verified', border: 'border-[#1E7E34]' },
   ];
 
+  if (!canReadTasks) {
+    return (
+      <div className="p-6 text-sm text-[#728294] border border-[#E3DED4] rounded-lg bg-white">
+        Task workspace access is not assigned to this account.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto select-none font-sans text-[#16233B] pb-24">
       
@@ -154,12 +177,14 @@ export default function TaskWorkspaceDesk() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white text-xs font-mono font-bold rounded cursor-pointer transition-all shadow-xs"
-        >
-          + CREATE NEW TASK
-        </button>
+        {canCreateTasks && (
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white text-xs font-mono font-bold rounded cursor-pointer transition-all shadow-xs"
+          >
+            + CREATE NEW TASK
+          </button>
+        )}
       </div>
 
       {/* Active Timer Sticky Ribbon */}

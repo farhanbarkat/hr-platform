@@ -7,7 +7,6 @@ export const AuthContext = createContext(null);
 
 /**
  * Pure Capability-Driven SaaS Landing Resolver
- * Role title par nahi, user ke granted capabilities array par decide karta hai.
  */
 export const resolveHomeRoute = (user) => {
   if (!user) return '/login';
@@ -66,7 +65,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => tokenStorage.getAccessToken());
   const [loading, setLoading] = useState(true);
 
-  // 1. Initial Session Hydration
+  // 1. Initial Session Hydration & Refresh Method
   const hydrateSession = useCallback(async () => {
     const storedToken = tokenStorage.getAccessToken();
     if (!storedToken) {
@@ -82,7 +81,6 @@ export function AuthProvider({ children }) {
       const freshUser = payload.user || payload;
 
       if (freshUser) {
-        // Guarantee permissions array exists
         if (!Array.isArray(freshUser.permissions) || freshUser.permissions.length === 0) {
           freshUser.permissions = getDefaultPermissionsForRole(freshUser.role);
         }
@@ -99,6 +97,25 @@ export function AuthProvider({ children }) {
       }
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // ✅ NEW: Industry-standard live user sync/refresh method for RBAC capability updates
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/auth/me');
+      const payload = res.data?.data || res.data;
+      const freshUser = payload.user || payload;
+
+      if (freshUser) {
+        if (!Array.isArray(freshUser.permissions) || freshUser.permissions.length === 0) {
+          freshUser.permissions = getDefaultPermissionsForRole(freshUser.role);
+        }
+        setUser(freshUser);
+        tokenStorage.setUser(freshUser);
+      }
+    } catch (err) {
+      console.error('Failed to refresh user session permissions:', err);
     }
   }, []);
 
@@ -261,6 +278,7 @@ export function AuthProvider({ children }) {
       login,
       verify2FA,
       logout,
+      refreshUser, // ✅ Exposed to application components
       hasRole,
       hasPermission,
       hasAnyPermission,
@@ -273,6 +291,7 @@ export function AuthProvider({ children }) {
       loading,
       isSuperAdmin,
       isCompanyAdmin,
+      refreshUser,
       hasRole,
       hasPermission,
       hasAnyPermission,
