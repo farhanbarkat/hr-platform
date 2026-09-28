@@ -55,6 +55,7 @@ export default function CompanyFinance() {
         },
       });
 
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const payload = res.data?.data;
       setData(payload || null);
 

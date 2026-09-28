@@ -50,8 +50,10 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
       const records = res.data?.data || [];
       if (records.length > 0) {
         setTodayRecord(records[0]);
+        return records[0];
       } else {
         setTodayRecord(null);
+        return null;
       }
     } catch (err) {
       console.warn('Failed to fetch today attendance record:', err);
@@ -80,6 +82,17 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
       setFeedback({ type: 'success', text: 'Checked in successfully.' });
       if (onRecordUpdated) onRecordUpdated();
     } catch (err) {
+      if (err.response?.status === 409) {
+        const existingRecord = await fetchTodayStatus();
+        if (existingRecord?.checkInTime && !existingRecord?.checkOutTime) {
+          setFeedback({
+            type: 'error',
+            text: 'You are already checked in. You can check out now.',
+          });
+          return;
+        }
+      }
+
       setFeedback({
         type: 'error',
         text: err.response?.data?.message || 'Check-in failed.',

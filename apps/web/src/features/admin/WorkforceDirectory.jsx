@@ -45,6 +45,7 @@ export default function WorkforceDirectory() {
     try {
       setLoading(true);
       const res = await apiClient.get('/employees?limit=200');
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const raw = res.data?.data || res.data || [];
       const list = Array.isArray(raw) ? raw : raw.employees || [];
       setEmployees(list);
@@ -58,6 +59,7 @@ export default function WorkforceDirectory() {
   const fetchDepartments = async () => {
     try {
       const res = await apiClient.get('/departments');
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const list = res.data?.data || res.data || [];
       const safeDepts = Array.isArray(list) ? list : [];
       setDepartments(safeDepts);
@@ -106,6 +108,7 @@ export default function WorkforceDirectory() {
       };
 
       const res = await apiClient.post('/employees', payload);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const data = res.data?.data || {};
 
       // Controller response: authAccount.tempPassword

@@ -41,6 +41,7 @@ export const generate2FAChallengeToken = (user) => {
   return signToken(
     {
       _id: user._id,
+      companyId: user.companyId,
       role: user.role,
       tokenType: TOKEN_TYPES.CHALLENGE_2FA,
     },
@@ -50,10 +51,14 @@ export const generate2FAChallengeToken = (user) => {
 };
 
 export const verifyToken = (token, secret, expectedTokenType) => {
+  if (!token) {
+    throw new Error('Token is missing.');
+  }
+
   const decoded = jwt.verify(token, secret);
 
   if (expectedTokenType && decoded?.tokenType !== expectedTokenType) {
-    throw new Error(`Invalid token type: expected ${expectedTokenType}.`);
+    throw new Error(`Invalid token type: expected '${expectedTokenType}', but got '${decoded?.tokenType}'.`);
   }
 
   return decoded;

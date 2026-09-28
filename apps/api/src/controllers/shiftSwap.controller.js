@@ -253,8 +253,14 @@ export const reviewSwapRequestByManager = asyncHandler(async (req, res) => {
   }
 
   // Swap shift templates atomically
-  const reqAssignment = await ShiftAssignment.findById(swapRequest.requesterShiftAssignmentId);
-  const targetAssignment = await ShiftAssignment.findById(swapRequest.targetShiftAssignmentId);
+  const reqAssignment = await ShiftAssignment.findOne({
+    _id: swapRequest.requesterShiftAssignmentId,
+    companyId,
+  });
+  const targetAssignment = await ShiftAssignment.findOne({
+    _id: swapRequest.targetShiftAssignmentId,
+    companyId,
+  });
 
   if (reqAssignment && targetAssignment && reqAssignment._id.toString() !== targetAssignment._id.toString()) {
     const tempShiftTemplate = reqAssignment.shiftTemplateId;

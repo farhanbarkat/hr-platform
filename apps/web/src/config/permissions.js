@@ -112,6 +112,15 @@ export const PERMISSIONS = {
     MANAGE_INTEGRATIONS: 'settings.manage_integrations',
   },
 
+  // Department permissions
+  DEPARTMENT: {
+    READ: 'department.read',
+    CREATE: 'department.create',
+    UPDATE: 'department.update',
+    DELETE: 'department.delete',
+    REASSIGN: 'department.reassign',
+  },
+
   // Calendar permissions
   CALENDAR: {
     READ: 'calendar.read',
@@ -185,6 +194,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.EMPLOYEE.MANAGE,
     PERMISSIONS.EMPLOYEE.MANAGE_DOCUMENTS,
     PERMISSIONS.EMPLOYEE.VIEW_ORG_CHART,
+
+    PERMISSIONS.DEPARTMENT.READ,
 
     PERMISSIONS.COMPANY.READ,
     PERMISSIONS.COMPANY.MANAGE_WORKSITES,

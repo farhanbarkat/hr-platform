@@ -1,9 +1,7 @@
-import { RolePermission } from '../models/rolePermission.model.js';
-import { RoleCapabilityOverride } from '../models/roleCapabilityOverride.model.js';
 import { Employee } from '../models/employee.model.js';
 import { AccessLog } from '../models/accessLog.model.js';
 import { getDefaultPermissionsForRole } from '../config/permissions.js';
-import { CustomRole } from '../models/customRole.model.js';
+import mongoose from 'mongoose';
 
 class RBACService {
   constructor() {
@@ -12,138 +10,108 @@ class RBACService {
     this.CACHE_TTL_MS = 5 * 60 * 1000;
   }
 
-  // 1. Fetch Base Role Permissions (with caching)
-  async getBaseRolePermissions(companyId, role) {
-    const cacheKey = `${companyId}:${role}`;
-    const now = Date.now();
-
-    const cached = this.rolePermissionCache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
-      return cached.permissions;
-    }
-
-    let permissions;
-    try {
-      if (RolePermission && typeof RolePermission.getEffectivePermissions === 'function') {
-        permissions = await RolePermission.getEffectivePermissions(companyId, role);
-      }
-      if (!permissions || permissions.length === 0) {
-        permissions = getDefaultPermissionsForRole(role);
-      }
-    } catch (err) {
-      console.error('RBAC: Failed to fetch base role permissions, using defaults:', err.message);
-      permissions = getDefaultPermissionsForRole(role);
-    }
-
-    this.rolePermissionCache.set(cacheKey, {
-      permissions,
-      expiresAt: now + this.CACHE_TTL_MS,
-    });
-
-    return permissions;
-  }
-
-  // 2. Fetch Effective Permissions (Base Role + Custom Role + Individual Overrides)
-  async getUserPermissions(user) {
+  /**
+   * Resolve one user's permissions for the current request context.
+   * Employee, custom role, and capability override data are loaded through
+   * one aggregation; route middleware only reads the resulting array.
+   */
+  async getEffectivePermissions(user, companyId = user?.companyId) {
     if (!user) return [];
 
-    // Super Admin aur Company Admin direct bypass
-    if (user.role === 'SUPER_ADMIN' || user.role === 'COMPANY_ADMIN') {
-      return getDefaultPermissionsForRole(user.role);
+    const role = String(user.role || 'EMPLOYEE').toUpperCase();
+    if (role === 'SUPER_ADMIN' || role === 'COMPANY_ADMIN' || user.isCompanyOwner) {
+      return ['*'];
     }
 
-    const companyId = user.companyId;
-    const userId = user._id || user.id;
-
-    // Check user-level cached permissions
-    const userCacheKey = `${companyId}:${userId}`;
-    const now = Date.now();
-    const userCached = this.userOverrideCache.get(userCacheKey);
-    if (userCached && userCached.expiresAt > now) {
-      return userCached.permissions;
+    const effectiveBase = getDefaultPermissionsForRole(role);
+    if (!companyId || !mongoose.Types.ObjectId.isValid(companyId)) {
+      return effectiveBase;
     }
 
-    // Step A: Base Role Permissions
-    const basePermissions = await this.getBaseRolePermissions(companyId, user.role);
-    let effectivePermissions = new Set(basePermissions);
+    const userObjectId = user._id || user.id;
+    const employeeMatch = [];
+    if (user.email) employeeMatch.push({ email: String(user.email).toLowerCase() });
+    if (mongoose.Types.ObjectId.isValid(userObjectId)) {
+      const objectId = new mongoose.Types.ObjectId(userObjectId);
+      employeeMatch.push({ userId: objectId }, { _id: objectId });
+    }
+
+    if (employeeMatch.length === 0) return effectiveBase;
 
     try {
-      // Step B: Resolve Employee Record
-      let employee = null;
-      if (user.employeeId) {
-        employee = await Employee.findById(user.employeeId).select('_id customRoleId');
-      } else {
-        employee = await Employee.findOne({
-          $or: [{ userId }, { email: user.email }],
-          companyId,
-        }).select('_id customRoleId');
-      }
+      const [resolved] = await Employee.aggregate([
+        { $match: { companyId: new mongoose.Types.ObjectId(companyId), $or: employeeMatch } },
+        { $project: { customRoleId: 1, _id: 1, companyId: 1 } },
+        {
+          $lookup: {
+            from: 'customroles',
+            let: { roleId: '$customRoleId', tenantId: '$companyId' },
+            pipeline: [
+              { $match: { $expr: { $and: [
+                { $eq: ['$_id', '$$roleId'] },
+                { $eq: ['$companyId', '$$tenantId'] },
+                { $eq: ['$isActive', true] },
+              ] } } },
+              { $project: { permissions: 1 } },
+            ],
+            as: 'customRole',
+          },
+        },
+        {
+          $lookup: {
+            from: 'rolecapabilityoverrides',
+            let: { employeeId: '$_id', tenantId: '$companyId' },
+            pipeline: [
+              { $match: { $expr: { $and: [
+                { $eq: ['$employeeId', '$$employeeId'] },
+                { $eq: ['$companyId', '$$tenantId'] },
+              ] } } },
+              { $project: { grantedPermissions: 1, removedPermissions: 1 } },
+              { $limit: 1 },
+            ],
+            as: 'override',
+          },
+        },
+        { $limit: 1 },
+      ]);
 
-      // A custom role is the employee's permission set when one is assigned.
-      const customRoleId = user.customRoleId || employee?.customRoleId;
-      if (customRoleId) {
-        const customRoleDoc = await CustomRole.findOne({
-          _id: customRoleId,
-          companyId,
-          isActive: true,
-        }).lean();
-
-        if (customRoleDoc && Array.isArray(customRoleDoc.permissions)) {
-          effectivePermissions = new Set(customRoleDoc.permissions);
-        }
-      }
-
-      // Step D: Individual Capability Overrides (Granted (+) aur Removed (-))
-      if (employee?._id) {
-        const override = await RoleCapabilityOverride.findOne({
-          companyId,
-          employeeId: employee._id,
-        }).lean();
-
-        if (override) {
-          if (Array.isArray(override.grantedPermissions)) {
-            override.grantedPermissions.forEach((perm) => effectivePermissions.add(perm));
-          }
-          if (Array.isArray(override.removedPermissions)) {
-            override.removedPermissions.forEach((perm) => effectivePermissions.delete(perm));
-          }
-        }
-      }
-    } catch (err) {
-      console.error('RBAC: Error resolving custom role & overrides:', err.message);
+      const customPermissions = resolved?.customRole?.[0]?.permissions;
+      const permissions = new Set(
+        Array.isArray(customPermissions) ? customPermissions : effectiveBase
+      );
+      const override = resolved?.override?.[0];
+      for (const permission of override?.grantedPermissions || []) permissions.add(permission);
+      for (const permission of override?.removedPermissions || []) permissions.delete(permission);
+      return [...permissions];
+    } catch (error) {
+      console.error('RBAC: Failed to resolve effective permissions:', error.message);
+      return effectiveBase;
     }
+  }
 
-    const finalPermissions = Array.from(effectivePermissions);
-
-    // User cache update
-    this.userOverrideCache.set(userCacheKey, {
-      permissions: finalPermissions,
-      expiresAt: now + this.CACHE_TTL_MS,
-    });
-
-    return finalPermissions;
+  async getUserPermissions(user) {
+    return this.getEffectivePermissions(user);
   }
 
   async hasPermission(user, permission) {
     if (!user) return false;
-
-    if (user.role === 'SUPER_ADMIN' || user.role === 'COMPANY_ADMIN') {
-      return true;
-    }
-
-    const permissions = await this.getUserPermissions(user);
+    const permissions = Array.isArray(user.permissions)
+      ? user.permissions
+      : await this.getEffectivePermissions(user);
     return permissions.includes('*') || permissions.includes(permission);
   }
 
   async hasAllPermissions(user, permissions) {
-    if (user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN') return true;
-    const userPerms = await this.getUserPermissions(user);
+    const userPerms = Array.isArray(user?.permissions)
+      ? user.permissions
+      : await this.getEffectivePermissions(user);
     return userPerms.includes('*') || permissions.every((p) => userPerms.includes(p));
   }
 
   async hasAnyPermission(user, permissions) {
-    if (user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN') return true;
-    const userPerms = await this.getUserPermissions(user);
+    const userPerms = Array.isArray(user?.permissions)
+      ? user.permissions
+      : await this.getEffectivePermissions(user);
     return userPerms.includes('*') || permissions.some((p) => userPerms.includes(p));
   }
 

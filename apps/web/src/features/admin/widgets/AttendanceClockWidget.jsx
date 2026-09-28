@@ -24,6 +24,7 @@ export default function AttendanceClockWidget() {
       };
 
       const res = await apiClient.post(`/attendance/${type}`, payload);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const msg = res.data?.message || `Clocked ${type === 'check-in' ? 'In' : 'Out'} recorded.`;
       setStatus(msg);
     } catch (err) {

@@ -7,14 +7,16 @@ import {
   getActiveTimer,
   getTaskTimeSummary,
 } from '../controllers/taskTimeLog.controller.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
 
 router.use(verifyJWT, tenantMiddleware);
 
-router.post('/start', startTimer);
-router.post('/stop', stopTimer);
-router.get('/active', getActiveTimer);
-router.get('/summary', getTaskTimeSummary);
+router.post('/start', requirePermission(PERMISSIONS.TASK.UPDATE), startTimer);
+router.post('/stop', requirePermission(PERMISSIONS.TASK.UPDATE), stopTimer);
+router.get('/active', requirePermission(PERMISSIONS.TASK.READ), getActiveTimer);
+router.get('/summary', requirePermission(PERMISSIONS.TASK.READ), getTaskTimeSummary);
 
 export default router;

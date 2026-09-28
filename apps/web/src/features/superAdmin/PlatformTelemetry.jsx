@@ -51,6 +51,10 @@ export default function PlatformTelemetry() {
           params: { page: 1, limit: 50, search: '' }
         });
 
+        if (!response?.data) {
+          throw new Error('Access denied or data unavailable');
+        }
+
         const payload = response.data?.data || response.data;
         let companiesList = [];
         if (Array.isArray(payload)) {

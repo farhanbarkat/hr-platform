@@ -28,6 +28,7 @@ export default function ExecutiveOverview() {
   const [attendanceStats, setAttendanceStats] = useState({ onFloor: 0, absent: 0, missing: 0, ratio: 0 });
   const [pendingLeaves, setPendingLeaves] = useState(0);
   const [trendData, setTrendData] = useState([]);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Load live data from your existing established routers
@@ -46,16 +47,21 @@ export default function ExecutiveOverview() {
 
         if (!isMounted) return;
 
+        const rejected = [empRes, attRes, leaveRes].some(
+          (result) => result.status === 'rejected'
+        );
+        if (rejected) setError('Unable to load this screen');
+
         // 1. Live Employees Count
         let empCount = 0;
-        if (empRes.status === 'fulfilled') {
+        if (empRes.status === 'fulfilled' && empRes.value?.data) {
           const raw = empRes.value.data?.data || empRes.value.data || [];
           empCount = Array.isArray(raw) ? raw.length : (raw.total || 0);
           setTotalEmployees(empCount);
         }
 
         // 2. Live Today Attendance Stats
-        if (attRes.status === 'fulfilled') {
+        if (attRes.status === 'fulfilled' && attRes.value?.data) {
           const rawAtt = attRes.value.data?.data || attRes.value.data || [];
           const records = Array.isArray(rawAtt) ? rawAtt : [];
 
@@ -91,12 +97,13 @@ export default function ExecutiveOverview() {
         }
 
         // 4. Live Pending Leaves Queue
-        if (leaveRes.status === 'fulfilled') {
+        if (leaveRes.status === 'fulfilled' && leaveRes.value?.data) {
           const rawLeaves = leaveRes.value.data?.data || leaveRes.value.data || [];
           setPendingLeaves(Array.isArray(rawLeaves) ? rawLeaves.length : 0);
         }
       } catch (err) {
         console.error('Error fetching dashboard live data:', err);
+        if (isMounted) setError('Unable to load this screen');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -113,6 +120,7 @@ export default function ExecutiveOverview() {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto select-none font-sans text-[#16233B] pb-12">
+    {error && <div className="border border-[#B83E28] bg-[#FFF4F1] px-4 py-3 text-sm text-[#8A2F1D]">{error}</div>}
       {/* 1. Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-[#E3DED4] gap-4">
         <div>

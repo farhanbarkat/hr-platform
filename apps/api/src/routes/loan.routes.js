@@ -3,6 +3,7 @@ import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requireEntitlement } from '../middlewares/entitlement.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 import {
   applyLoan,
   getMyLoans,
@@ -26,8 +27,8 @@ router.use(requireEntitlement('mod_payroll_loans'));
 // ==========================================
 // Employee Self-Service (TICKET-029)
 // ==========================================
-router.post('/apply', applyLoan);
-router.get('/my-loans', getMyLoans);
+router.post('/apply', requirePermission(PERMISSIONS.FINANCE.CREATE_LOAN), applyLoan);
+router.get('/my-loans', requirePermission(PERMISSIONS.FINANCE.VIEW_OWN), getMyLoans);
 
 // ==========================================
 // Batch Payroll Run with Atomic EMI Deduction (TICKET-030)

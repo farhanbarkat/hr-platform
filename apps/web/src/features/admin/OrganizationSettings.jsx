@@ -66,6 +66,7 @@ export default function OrganizationSettings() {
     try {
       setLoading(true);
       const res = await apiClient.get('/letter-templates');
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const list = res.data?.data?.templates || res.data?.data || [];
       setTemplates(Array.isArray(list) ? list : []);
 
@@ -97,6 +98,10 @@ export default function OrganizationSettings() {
     try {
       setLoading(true);
       const res = await apiClient.get(`/tax-slabs?country=${countryCode}&all=false`);
+      if (!res?.data) {
+        throw new Error('Access denied or data unavailable');
+      }
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const payload = res.data?.data;
       if (payload?.slabs && payload.slabs.length > 0) {
         const activeSlabDoc = payload.slabs[0];
@@ -163,7 +168,10 @@ export default function OrganizationSettings() {
     try {
       setLoading(true);
       const res = await apiClient.get('/companies/me');
-      const company = res.data?.data || {};
+      if (!res?.data?.data) {
+        throw new Error('Access denied or data unavailable');
+      }
+      const company = res.data.data;
       setWorksiteSettings({
         address: company.worksiteLocation?.address || '',
         latitude: company.worksiteLocation?.latitude ?? 31.5204,
@@ -263,6 +271,7 @@ export default function OrganizationSettings() {
     try {
       setActionLoading(true);
       const res = await apiClient.delete(`/letter-templates/${selectedType}`);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const def = res.data?.data;
       if (def && editorRef.current) {
         editorRef.current.innerHTML = def.bodyContent || '';
@@ -290,6 +299,7 @@ export default function OrganizationSettings() {
           lastWorkingDate: 'September 30, 2026',
         },
       });
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const fileUrl = res.data?.data?.fileUrl || res.data?.data?.url;
       if (fileUrl) window.open(fileUrl, '_blank');
       else alert('PDF compiled. Review download stream.');
@@ -305,6 +315,7 @@ export default function OrganizationSettings() {
     try {
       setActionLoading(true);
       const res = await apiClient.post('/tax-slabs/apply-preset', { country: countryCode, force: true });
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       setActionStatus(res.data?.message || 'Tax tables synchronized from official FBR presets.');
       await loadTaxSlabs();
     } catch (err) {
@@ -346,6 +357,7 @@ export default function OrganizationSettings() {
         country: countryCode,
         taxYear: taxYear,
       });
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       setSimulationResult(res.data?.data || null);
     } catch (err) {
       alert(err.response?.data?.message || 'Simulation test failed.');

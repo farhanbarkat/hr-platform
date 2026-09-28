@@ -37,7 +37,8 @@ const PERMISSION_CATALOG = [
     permissions: [
       { key: PERMISSIONS.ATTENDANCE?.READ || 'attendance.read', label: 'View Company Attendance Ledger' },
       { key: PERMISSIONS.ATTENDANCE?.VIEW_TEAM || 'attendance.view_team', label: 'Shift Incharge Live Floor Telemetry' },
-      { key: PERMISSIONS.ATTENDANCE?.RECORD || 'attendance.record', label: 'Self Punch-in & Out Capability' },
+      { key: PERMISSIONS.ATTENDANCE.CHECK_IN, label: 'Self Punch-in Capability' },
+      { key: PERMISSIONS.ATTENDANCE.CHECK_OUT, label: 'Self Punch-out Capability' },
       { key: PERMISSIONS.ATTENDANCE?.UPDATE || 'attendance.update', label: 'Manual Punch Correction & Override' },
     ],
   },
@@ -73,7 +74,7 @@ const PERMISSION_CATALOG = [
   {
     category: 'Tenant Governance & Rostering',
     permissions: [
-      { key: PERMISSIONS.COMPANY?.READ || 'company.read', label: 'View Departments & Shift Templates' },
+      { key: PERMISSIONS.DEPARTMENT.READ, label: 'View Departments & Shift Templates' },
       { key: PERMISSIONS.COMPANY?.CONFIGURE || 'company.configure', label: 'Manage Units, Shifts & Roster Policies' },
     ],
   },

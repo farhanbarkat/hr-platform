@@ -60,6 +60,7 @@ export default function TenantManagement() {
         params: { page: 1, limit: 100, search },
       });
 
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const payload = res.data?.data || res.data || [];
       const list = Array.isArray(payload)
         ? payload

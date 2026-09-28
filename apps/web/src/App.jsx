@@ -171,7 +171,6 @@ export default function App() {
                 'attendance.view_team',
                 'payroll.read',
                 'payroll.run',
-                'company.read',
                 'company.configure',
                 'finance.view_dashboard',
                 'settings.read',
@@ -191,7 +190,14 @@ export default function App() {
           index
           element={<Navigate to="/company-admin/overview" replace />}
         />
-        <Route path="overview" element={<ExecutiveOverview />} />
+        <Route
+          path="overview"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.EMPLOYEE.READ}>
+              <ExecutiveOverview />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Workforce Directory */}
         <Route
@@ -207,7 +213,7 @@ export default function App() {
         <Route
           path="teams"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission={PERMISSIONS.EMPLOYEE.READ}>
               <TeamHubDesk />
             </ProtectedRoute>
           }
@@ -240,7 +246,7 @@ export default function App() {
         <Route
           path="shift-incharge"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission={PERMISSIONS.ATTENDANCE.VIEW_TEAM}>
               <ShiftInchargeDashboard />
             </ProtectedRoute>
           }
@@ -300,7 +306,7 @@ export default function App() {
         <Route
           path="helpdesk"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="helpdesk.read">
               <CompanyHelpdeskDesk />
             </ProtectedRoute>
           }
@@ -359,7 +365,7 @@ export default function App() {
         <Route
           path="tax"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission={PERMISSIONS.PAYROLL.READ}>
               <TaxWorkspaceDesk />
             </ProtectedRoute>
           }
@@ -369,7 +375,12 @@ export default function App() {
         <Route
           path="loans"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute
+              requiredPermissions={[
+                PERMISSIONS.FINANCE.VIEW_DASHBOARD,
+                PERMISSIONS.FINANCE.VIEW_OWN,
+              ]}
+            >
               <LoanManagementDesk />
             </ProtectedRoute>
           }

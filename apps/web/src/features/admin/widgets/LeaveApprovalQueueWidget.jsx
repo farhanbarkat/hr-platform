@@ -16,6 +16,7 @@ export default function LeaveApprovalQueueWidget({ count }) {
     // Plural route: /leaves/pending-approvals
     apiClient.get('/leaves/pending-approvals')
       .then((res) => {
+        if (!res?.data) throw new Error('Access denied or data unavailable');
         const list = res.data?.data || res.data || [];
         setPendingCount(Array.isArray(list) ? list.length : 0);
       })

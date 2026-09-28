@@ -6,7 +6,7 @@ import { AccessLog } from '../models/accessLog.model.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { generateAccessToken } from '../utils/token.util.js';
+import { generateAccessToken, TOKEN_TYPES } from '../utils/token.util.js';
 
 /**
  * @desc    Onboard a new company with initial Company Admin
@@ -207,6 +207,7 @@ export const impersonateCompany = asyncHandler(async (req, res) => {
       companyId: targetCompany._id,
       isImpersonating: true,
       isReadOnly: true,
+      tokenType: TOKEN_TYPES.ACCESS,
       impersonatedCompanyId: targetCompany._id,
       impersonatedCompanyName: targetCompany.name,
     },

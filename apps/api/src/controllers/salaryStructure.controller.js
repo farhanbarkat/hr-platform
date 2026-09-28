@@ -36,7 +36,11 @@ export const getActiveSalary = asyncHandler(async (req, res) => {
   const { date } = req.query;
 
   const targetDate = date ? new Date(date) : new Date();
-  const structure = await SalaryStructureService.getActiveSalaryStructure(employeeId, targetDate);
+  const structure = await SalaryStructureService.getActiveSalaryStructure(
+    req.companyId,
+    employeeId,
+    targetDate
+  );
 
   if (!structure) {
     throw new ApiError(

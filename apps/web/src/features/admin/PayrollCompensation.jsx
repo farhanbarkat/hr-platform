@@ -37,6 +37,7 @@ export default function PayrollCompensation() {
       setLoading(true);
       setFeedback(null);
       const res = await apiClient.get('/payroll/runs');
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const runsList = res.data?.data || [];
       setRuns(runsList);
 
@@ -64,6 +65,7 @@ export default function PayrollCompensation() {
   const fetchPayslipsForRun = async (runId) => {
     try {
       const res = await apiClient.get(`/payroll/runs/${runId}/payslips`);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       setPayslips(res.data?.data || []);
     } catch (err) {
       console.error('Failed to fetch run payslips:', err);
@@ -88,6 +90,7 @@ export default function PayrollCompensation() {
           month: Number(selectedMonth),
           year: Number(selectedYear),
         });
+        if (!createRes?.data) throw new Error('Access denied or data unavailable');
         runId = createRes.data?.data?._id;
       }
 
@@ -148,6 +151,7 @@ export default function PayrollCompensation() {
 
       // Step B: Fetch download URL
       const res = await apiClient.get(`/payslips/${slip._id}/download`);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const downloadUrl = res.data?.data?.url || res.data?.data?.downloadUrl || res.data?.data;
 
       if (downloadUrl && typeof downloadUrl === 'string') {

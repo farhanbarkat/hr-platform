@@ -30,11 +30,11 @@ router.post(
 );
 
 // 3. Team Dashboard (Internally checks team membership, managerId, or privileged role)
-router.get('/:teamId/dashboard', getTeamDashboard);
+router.get('/:teamId/dashboard', requirePermission(PERMISSIONS.TEAM.READ), getTeamDashboard);
 
-router.patch('/:teamId/members', updateTeamMembers);
+router.patch('/:teamId/members', requirePermission(PERMISSIONS.TEAM.UPDATE), updateTeamMembers);
 
 // 4. Team Discussions Feed
-router.post('/:teamId/discussions', postTeamDiscussion);
+router.post('/:teamId/discussions', requirePermission(PERMISSIONS.TEAM.READ), postTeamDiscussion);
 
 export default router;

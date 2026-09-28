@@ -18,6 +18,7 @@ export default function TimeAttendance() {
     try {
       setLoading(true);
       const res = await apiClient.get(`/attendance?date=${selectedDate}&limit=200`);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const raw = res.data?.data || res.data || [];
       const list = Array.isArray(raw) ? raw : (raw.records || raw.data || []);
       setRecords(list);

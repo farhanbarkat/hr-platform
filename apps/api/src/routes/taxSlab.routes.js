@@ -16,16 +16,16 @@ router.use(verifyJWT);
 router.use(tenantMiddleware);
 
 // 1. Preset Endpoints (Must be above /:country or generic routes)
-router.get('/presets', getTaxPresets);
-router.get('/presets/:country', getTaxPresets);
-router.post('/apply-preset', applyTaxPreset);
+router.get('/presets', authorizePermission(PERMISSIONS.PAYROLL.READ), getTaxPresets);
+router.get('/presets/:country', authorizePermission(PERMISSIONS.PAYROLL.READ), getTaxPresets);
+router.post('/apply-preset', authorizePermission(PERMISSIONS.PAYROLL.UPDATE), applyTaxPreset);
 
 // 2. Main Slabs Endpoints
 router.route('/')
-  .get(getTaxSlabs)
-  .post(upsertTaxSlab);
+  .get(authorizePermission(PERMISSIONS.PAYROLL.READ), getTaxSlabs)
+  .post(authorizePermission(PERMISSIONS.PAYROLL.UPDATE), upsertTaxSlab);
 
 // 3. Simulation
-router.post('/simulate', simulateTaxCalculation);
+router.post('/simulate', authorizePermission(PERMISSIONS.PAYROLL.READ), simulateTaxCalculation);
 
 export default router;

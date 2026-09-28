@@ -32,15 +32,27 @@ export const validateGeofence = (userLat, userLng, company) => {
     };
   }
 
-  const officeLat = company.worksiteLocation?.latitude ?? 31.5204;
-  const officeLng = company.worksiteLocation?.longitude ?? 74.3587;
-  const allowedRadius = company.allowedRadiusMeters ?? 150;
+  const lat = Number(userLat);
+  const lng = Number(userLng);
+
+  // Fixed: Validate against NaN and valid GPS coordinate ranges
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return {
+      isValid: false,
+      reason: 'Invalid GPS coordinates provided. Latitude must be between -90 and 90, and Longitude between -180 and 180.',
+      distanceMeters: null,
+    };
+  }
+
+  const officeLat = Number(company.worksiteLocation?.latitude ?? 31.5204);
+  const officeLng = Number(company.worksiteLocation?.longitude ?? 74.3587);
+  const allowedRadius = Number(company.allowedRadiusMeters ?? 150);
 
   const distanceMeters = calculateHaversineDistanceMeters(
-    Number(userLat),
-    Number(userLng),
-    Number(officeLat),
-    Number(officeLng)
+    lat,
+    lng,
+    officeLat,
+    officeLng
   );
 
   if (distanceMeters > allowedRadius) {

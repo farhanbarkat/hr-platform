@@ -7,7 +7,7 @@ import {
   initializeYearlyBalances,
   getMyLeaveBalances,
   getEmployeeBalancesByAdmin,
-} from '../controllers/leave.controller.js';
+} from '../controllers/leaveRequest.controller.js';
 
 // TICKET-013 Controllers (Leave Workflow & Approvals)
 import {
@@ -77,7 +77,11 @@ router.get(
 // FIX: Admins can view approval queue even if tenant plan is missing 'mod_leave_complex'
 router.get(
   '/pending-approvals',
-  requireAnyPermission([PERMISSIONS.LEAVE.VIEW_TEAM, PERMISSIONS.LEAVE.READ]),
+  requireAnyPermission([
+    PERMISSIONS.LEAVE.VIEW_TEAM,
+    PERMISSIONS.LEAVE.READ,
+    PERMISSIONS.LEAVE.APPROVE_MANAGER,
+  ]),
   getPendingApprovals
 );
 

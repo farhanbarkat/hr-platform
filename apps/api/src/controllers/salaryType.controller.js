@@ -98,6 +98,7 @@ export const previewSalaryCalculation = asyncHandler(async (req, res) => {
 
   // Fetch active structure snapshot
   const structure = await SalaryStructureService.getActiveSalaryStructure(
+    req.companyId,
     employeeId,
     targetDate
   );

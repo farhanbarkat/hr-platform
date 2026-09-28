@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { PERMISSIONS } from '../../config/permissions.js';
 
 export default function LoanManagementDesk() {
-  const { user, isSuperAdmin, isCompanyAdmin } = useAuth();
+  const { hasPermission } = useAuth();
 
-  const isHRorAdmin =
-    isSuperAdmin ||
-    isCompanyAdmin ||
-    ['HR', 'ADMIN', 'COMPANY_ADMIN'].includes(String(user?.role || '').toUpperCase());
+  const isHRorAdmin = hasPermission(PERMISSIONS.FINANCE.READ_EXPENSE);
+  const canApplyForLoan = hasPermission(PERMISSIONS.FINANCE.CREATE_LOAN);
 
   const [activeTab, setActiveTab] = useState(isHRorAdmin ? 'company-loans' : 'my-loans');
   const [loading, setLoading] = useState(false);
@@ -39,6 +38,7 @@ export default function LoanManagementDesk() {
       let query = '/loans';
       if (statusFilter) query += `?status=${statusFilter}`;
       const res = await apiClient.get(query);
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       setCompanyLoans(res.data?.data || []);
     } catch (err) {
       console.warn('Failed to fetch company loans:', err);
@@ -52,6 +52,7 @@ export default function LoanManagementDesk() {
     try {
       setLoading(true);
       const res = await apiClient.get('/loans/my-loans');
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       setMyLoans(res.data?.data || []);
     } catch (err) {
       console.warn('Failed to fetch personal loans:', err);
@@ -185,12 +186,12 @@ export default function LoanManagementDesk() {
           </p>
         </div>
 
-        <button
+        {canApplyForLoan && <button
           onClick={() => setIsApplyModalOpen(true)}
           className="px-4 py-2 bg-[#8C5D17] hover:bg-[#784F14] text-white text-xs font-mono font-bold rounded cursor-pointer transition-all shadow-xs"
         >
           + APPLY FOR LOAN
-        </button>
+        </button>}
       </div>
 
       {feedback.text && (
@@ -493,7 +494,7 @@ export default function LoanManagementDesk() {
       )}
 
       {/* MODAL 1: APPLY FOR LOAN (ESS) */}
-      {isApplyModalOpen && (
+      {isApplyModalOpen && canApplyForLoan && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg border border-[#E3DED4] p-6 max-w-md w-full shadow-lg font-sans">
             <h3 className="text-sm font-bold text-[#16233B]">Apply for Company Advance / Loan</h3>

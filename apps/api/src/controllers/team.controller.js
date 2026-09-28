@@ -167,7 +167,7 @@ export const getTeamDashboard = asyncHandler(async (req, res) => {
       ]
     }).select('title status priority deadline').lean();
   } catch (err) {
-    tasks = [];
+    throw new ApiError(500, `Failed to load team tasks: ${err.message}`);
   }
 
   // 2. Fetch Discussions safely
@@ -179,7 +179,7 @@ export const getTeamDashboard = asyncHandler(async (req, res) => {
       .limit(30)
       .lean();
   } catch (err) {
-    discussions = [];
+    throw new ApiError(500, `Failed to load team discussions: ${err.message}`);
   }
 
   // Task Summary Calculation
@@ -237,7 +237,7 @@ export const updateTeamMembers = asyncHandler(async (req, res) => {
   team.members = Array.isArray(memberIds) ? memberIds : [];
   await team.save();
 
-  const updatedTeam = await Team.findById(teamId)
+  const updatedTeam = await Team.findOne({ _id: teamId, companyId })
     .populate('managerId', 'firstName lastName email designation')
     .populate('members', 'firstName lastName email designation');
 
