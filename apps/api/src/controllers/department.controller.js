@@ -180,7 +180,7 @@ export const reassignEmployeeDepartment = asyncHandler(async (req, res) => {
 
   await employee.save();
 
-  const updatedEmployee = await Employee.findById(employee._id)
+  const updatedEmployee = await Employee.findOne({ _id: employee._id, companyId })
     .populate('departmentId', 'name description')
     .populate('userId', 'name email role');
 

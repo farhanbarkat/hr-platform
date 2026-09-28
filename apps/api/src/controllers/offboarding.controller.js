@@ -28,7 +28,6 @@ export const initiateOffboarding = asyncHandler(async (req, res) => {
 
   let targetEmployeeId = employeeId;
 
-  // If initiated by employee via ESS
   if (req.user.role === 'EMPLOYEE' || req.user.role === 'employee') {
     targetEmployeeId = req.user.employeeId || req.user._id;
   }
@@ -46,7 +45,6 @@ export const initiateOffboarding = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Employee record not found in this organization.');
   }
 
-  // Prevent multiple active offboarding cycles
   const activeOffboarding = await Offboarding.findOne({
     companyId,
     employeeId: employee._id,
@@ -80,7 +78,6 @@ export const initiateOffboarding = asyncHandler(async (req, res) => {
     acknowledgedAt: isSelf ? null : new Date(),
   });
 
-  // If HR initiates, generate checklist immediately
   if (!isSelf) {
     const checklistPayload = DEFAULT_CHECKLIST_ITEMS.map((item) => ({
       ...item,
@@ -123,7 +120,7 @@ export const acknowledgeResignation = asyncHandler(async (req, res) => {
   offboarding.acknowledgedBy = req.user._id;
   offboarding.acknowledgedAt = new Date();
 
-  // Generate Resignation Acceptance Letter (TICKET-022B1 Engine)
+  // Generate Resignation Acceptance Letter - Fixed: Throws error on failure to prevent fake success
   try {
     const emp = offboarding.employeeId;
     const letter = await LetterTemplateService.generateLetterPdf({
@@ -139,13 +136,15 @@ export const acknowledgeResignation = asyncHandler(async (req, res) => {
     });
     offboarding.resignationAcceptanceUrl = letter.fileUrl;
   } catch (err) {
-    console.warn('[Offboarding] Resignation Acceptance Letter skipped/warning:', err.message);
+    throw new ApiError(500, `Failed to generate resignation acceptance letter: ${err.message}`);
   }
 
   await offboarding.save();
 
-  // Auto-create clearance checklist
-  const existingItems = await ClearanceChecklistItem.find({ offboardingId: offboarding._id });
+  const existingItems = await ClearanceChecklistItem.find({
+    companyId,
+    offboardingId: offboarding._id,
+  });
   if (existingItems.length === 0) {
     const checklistPayload = DEFAULT_CHECKLIST_ITEMS.map((item) => ({
       ...item,
@@ -166,7 +165,7 @@ export const acknowledgeResignation = asyncHandler(async (req, res) => {
  */
 export const updateChecklistItem = asyncHandler(async (req, res) => {
   const companyId = req.companyId;
-  const { id } = req.params; // checklist item ID
+  const { id } = req.params;
   const { status, remarks } = req.body;
 
   if (!['completed', 'waived', 'pending'].includes(status)) {
@@ -184,7 +183,6 @@ export const updateChecklistItem = asyncHandler(async (req, res) => {
   if (remarks) item.remarks = remarks;
   await item.save();
 
-  // Check if all items in offboarding are completed/waived
   const pendingCount = await ClearanceChecklistItem.countDocuments({
     offboardingId: item.offboardingId,
     companyId,
@@ -201,7 +199,7 @@ export const updateChecklistItem = asyncHandler(async (req, res) => {
 });
 
 /**
- * 4. Trigger Final Settlement (Proration, Leave Encashment, Loans)
+ * 4. Trigger Final Settlement
  */
 export const processFinalSettlement = asyncHandler(async (req, res) => {
   const companyId = req.companyId;
@@ -219,7 +217,6 @@ export const processFinalSettlement = asyncHandler(async (req, res) => {
 
   const employee = offboarding.employeeId;
 
-  // Active Salary Structure
   const salaryStructure = await SalaryStructure.findOne({
     employeeId: employee._id,
     companyId,
@@ -229,7 +226,6 @@ export const processFinalSettlement = asyncHandler(async (req, res) => {
   const basicPay = Number(salaryStructure?.basicPay || 0);
   const grossSalary = Number(salaryStructure?.grossSalary || basicPay);
 
-  // 1. Prorate Pay for Partial Final Month (TICKET-015 Math Logic)
   const lwd = new Date(offboarding.lastWorkingDate);
   const daysWorkedInFinalMonth = lwd.getDate();
   const totalDaysInFinalMonth = new Date(lwd.getFullYear(), lwd.getMonth() + 1, 0).getDate();
@@ -238,7 +234,6 @@ export const processFinalSettlement = asyncHandler(async (req, res) => {
   const proratedBasicPay = Math.round(basicPay * proratedFactor);
   const proratedGross = Math.round(grossSalary * proratedFactor);
 
-  // 2. Leave Encashment Calculation
   let encashedLeavesCount = 0;
   let leaveEncashmentAmount = 0;
 
@@ -250,7 +245,6 @@ export const processFinalSettlement = asyncHandler(async (req, res) => {
     leaveEncashmentAmount = Math.round(encashedLeavesCount * dailyRate);
   }
 
-  // 3. Outstanding Loan Check (Graceful Phase 3 Degradation)
   let outstandingLoanDeduction = 0;
   try {
     const LoanModel = mongoose.models.Loan;
@@ -265,7 +259,7 @@ export const processFinalSettlement = asyncHandler(async (req, res) => {
       }
     }
   } catch (err) {
-    console.warn('[Offboarding] Loan model resolution skipped:', err.message);
+    throw new ApiError(500, `Failed to resolve outstanding loan balance: ${err.message}`);
   }
 
   const totalEarnings = proratedGross + leaveEncashmentAmount;
@@ -319,13 +313,13 @@ export const completeExit = asyncHandler(async (req, res) => {
 
   const employee = offboarding.employeeId;
 
-  // Generate Relieving Letter & Experience Letter (TICKET-022B1 Engine)
   const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
   const joiningDateStr = employee.dateOfJoining
     ? new Date(employee.dateOfJoining).toLocaleDateString('en-US', dateOptions)
     : 'Date of Joining';
   const lwdStr = new Date(offboarding.lastWorkingDate).toLocaleDateString('en-US', dateOptions);
 
+  // Fixed: Enforce strict letter generation without fake-success fallbacks
   try {
     const relieving = await LetterTemplateService.generateLetterPdf({
       templateType: 'relievingLetter',
@@ -340,7 +334,7 @@ export const completeExit = asyncHandler(async (req, res) => {
     });
     offboarding.relievingLetterUrl = relieving.fileUrl;
   } catch (err) {
-    console.warn('[Offboarding] Relieving letter generation fallback:', err.message);
+    throw new ApiError(500, `Failed to generate relieving letter: ${err.message}`);
   }
 
   try {
@@ -358,10 +352,9 @@ export const completeExit = asyncHandler(async (req, res) => {
     });
     offboarding.experienceLetterUrl = experience.fileUrl;
   } catch (err) {
-    console.warn('[Offboarding] Experience letter generation fallback:', err.message);
+    throw new ApiError(500, `Failed to generate experience letter: ${err.message}`);
   }
 
-  // Generate 90-day time-limited secure token for exited employee letter downloads
   const secureToken = crypto.randomBytes(32).toString('hex');
   const tokenExpiry = new Date();
   tokenExpiry.setDate(tokenExpiry.getDate() + 90);
@@ -371,16 +364,14 @@ export const completeExit = asyncHandler(async (req, res) => {
   offboarding.status = 'exited';
   await offboarding.save();
 
-  // Update Employee Status to 'exited'
-  await Employee.findByIdAndUpdate(employee._id, {
+  await Employee.findOneAndUpdate({ _id: employee._id, companyId }, {
     employmentStatus: 'exited',
     status: 'inactive',
     isActive: false,
   });
 
-  // Deactivate User Login
   if (employee.userId) {
-    await User.findByIdAndUpdate(employee.userId, {
+    await User.findOneAndUpdate({ _id: employee.userId, companyId }, {
       isActive: false,
       status: 'inactive',
     });
@@ -399,7 +390,7 @@ export const completeExit = asyncHandler(async (req, res) => {
 });
 
 /**
- * 6. Secure Access Link for Exited Employees (No login required)
+ * 6. Secure Access Link for Exited Employees
  */
 export const getExitedEmployeeLetters = asyncHandler(async (req, res) => {
   const { token } = req.params;
@@ -429,7 +420,7 @@ export const getExitedEmployeeLetters = asyncHandler(async (req, res) => {
 });
 
 /**
- * 7. Query Offboarding Records (HR & Profile History)
+ * 7. Query Offboarding Records
  */
 export const getCompanyOffboardings = asyncHandler(async (req, res) => {
   const companyId = req.companyId;

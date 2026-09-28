@@ -82,7 +82,11 @@ export class SalaryStructureService {
    * Resolves the exact salary structure active on a given historical or current date.
    * Query pattern: effectiveFrom <= queryDate ORDER BY effectiveFrom DESC LIMIT 1
    */
-  static async getActiveSalaryStructure(employeeId, queryDate = new Date()) {
+  static async getActiveSalaryStructure(companyId, employeeId, queryDate = new Date()) {
+    if (!companyId) {
+      throw new ApiError(400, 'Company context is required for salary lookup.');
+    }
+
     const targetDate = new Date(queryDate);
     if (isNaN(targetDate.getTime())) {
       throw new ApiError(
@@ -92,6 +96,7 @@ export class SalaryStructureService {
     }
 
     const structure = await SalaryStructure.findOne({
+      companyId,
       employeeId,
       effectiveFrom: { $lte: targetDate },
     })

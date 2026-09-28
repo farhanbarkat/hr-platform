@@ -14,6 +14,11 @@ export default function SupportDesk() {
     try {
       setLoading(true);
       const response = await apiClient.get('/super-admin/advanced/support-tickets');
+
+      if (!response?.data) {
+        throw new Error('Access denied or data unavailable');
+      }
+
       console.log('✅ Live Backend Support Tickets Response:', response.data);
 
       const raw = response.data?.data ?? response.data;

@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import { TOKEN_TYPES, verifyToken } from '../utils/token.util.js';
 
 export const setupChatSocket = (io) => {
   // Socket JWT authentication middleware
@@ -7,7 +7,11 @@ export const setupChatSocket = (io) => {
     if (!token) return next(new Error('Authentication token required'));
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      const decoded = verifyToken(
+        token,
+        process.env.JWT_ACCESS_SECRET,
+        TOKEN_TYPES.ACCESS
+      );
       socket.user = decoded;
       next();
     } catch (err) {
@@ -16,7 +20,11 @@ export const setupChatSocket = (io) => {
   });
 
   io.on('connection', (socket) => {
-    const userId = socket.user._id;
+    const userId = socket.user._id || socket.user.id;
+    if (!userId) {
+      socket.disconnect(true);
+      return;
+    }
     // Join personal user room for direct 1-to-1 routing
     socket.join(`user:${userId}`);
 

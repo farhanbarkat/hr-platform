@@ -8,6 +8,7 @@ import {
   updateMyProfile,
 } from '../controllers/employee.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
+import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
 import { PERMISSIONS } from '../config/permissions.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
@@ -20,7 +21,7 @@ import {
 const router = Router();
 
 // Base Middlewares
-router.use(verifyJWT);
+router.use(verifyJWT, tenantMiddleware);
 router.use(enforceReadOnlyImpersonation);
 
 // --- Employee Self-Service Routes (Any authenticated employee) ---
@@ -40,7 +41,7 @@ router.use(enforceReadOnlyImpersonation);
  *       401:
  *         description: Unauthorized
  */
-router.get('/me/profile', getMyProfile);
+router.get('/me/profile', requirePermission(PERMISSIONS.EMPLOYEE.VIEW_OWN), getMyProfile);
 
 /**
  * @openapi
@@ -57,7 +58,7 @@ router.get('/me/profile', getMyProfile);
  *       400:
  *         description: Validation error
  */
-router.patch('/me/profile', updateMyProfile);
+router.patch('/me/profile', requirePermission(PERMISSIONS.EMPLOYEE.VIEW_OWN), updateMyProfile);
 
 // --- Bulk import routes (Restricted to COMPANY_ADMIN, HR, SUPER_ADMIN) ---
 

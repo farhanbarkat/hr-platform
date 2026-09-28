@@ -10,13 +10,14 @@ import {
   getCurrentUser, 
 } from '../controllers/auth.controller.js';
 import { verify2FAChallenge, verifyJWT } from '../middlewares/auth.middleware.js';
+import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 
 const router = Router();
 
 // ============================================================================
 // Active Session Hydration (Resolves Frontend 404)
 // ============================================================================
-router.get('/me', verifyJWT, getCurrentUser); // <-- FIX 2: /me route added
+router.get('/me', verifyJWT, tenantMiddleware, getCurrentUser); // <-- FIX 2: /me route added
 
 /**
  * @openapi
@@ -72,7 +73,7 @@ router.post('/2fa/verify-login', verify2FAChallenge, verify2FALogin);
  *     tags:
  *       - Authentication
  */
-router.post('/logout', verifyJWT, logout);
+router.post('/logout', verifyJWT, tenantMiddleware, logout);
 
 /**
  * @openapi
@@ -81,6 +82,6 @@ router.post('/logout', verifyJWT, logout);
  *     tags:
  *       - Authentication
  */
-router.post('/device-token', verifyJWT, registerDeviceToken);
+router.post('/device-token', verifyJWT, tenantMiddleware, registerDeviceToken);
 
 export default router;

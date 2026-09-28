@@ -7,26 +7,27 @@ import {
   getExpiringDocuments,
 } from '../controllers/document.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
+import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
 import { PERMISSIONS } from '../config/permissions.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
 
 const router = Router();
 
-router.use(verifyJWT);
+router.use(verifyJWT, tenantMiddleware);
 router.use(enforceReadOnlyImpersonation);
 
 // Pre-signed Upload URL (Admin/HR or self-employee)
-router.post('/upload-url', getUploadUrl);
+router.post('/upload-url', requirePermission(PERMISSIONS.DOCUMENT.UPLOAD), getUploadUrl);
 
 // Confirm Upload & Trigger Scan
-router.post('/', confirmUpload);
+router.post('/', requirePermission(PERMISSIONS.DOCUMENT.UPLOAD), confirmUpload);
 
 // Pre-signed Download URL (Admin/HR or self-employee)
-router.get('/:id/download-url', getDownloadUrl);
+router.get('/:id/download-url', requirePermission(PERMISSIONS.DOCUMENT.VIEW_OWN), getDownloadUrl);
 
 // List Employee Documents
-router.get('/employee/:employeeId', getEmployeeDocuments);
+router.get('/employee/:employeeId', requirePermission(PERMISSIONS.DOCUMENT.VIEW_OWN), getEmployeeDocuments);
 
 // Admin-only: Query Expiring Documents for reminders
 router.get('/expiring', requirePermission(PERMISSIONS.DOCUMENT.READ), getExpiringDocuments);

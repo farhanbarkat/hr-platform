@@ -11,6 +11,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateGeofence } from '../utils/geo.helper.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 /**
  * Helper to resolve Employee for current user/request
@@ -220,12 +221,21 @@ export const getAttendanceRecords = asyncHandler(async (req, res) => {
       : companyId,
   };
 
-  if (req.user?.role === 'EMPLOYEE') {
+  const userPermissions = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
+  const canReadCompanyAttendance =
+    req.user?.role === 'SUPER_ADMIN' ||
+    userPermissions.includes('*') ||
+    userPermissions.includes(PERMISSIONS.ATTENDANCE.READ);
+
+  if (!canReadCompanyAttendance) {
     const employee = await Employee.findOne({
       companyId: filter.companyId,
       $or: [{ userId: req.user._id }, { email: req.user.email?.toLowerCase() }],
     });
-    filter.employeeId = employee?._id;
+    if (!employee) {
+      throw new ApiError(404, 'Your account is not linked to an employee profile.');
+    }
+    filter.employeeId = employee._id;
   } else if (employeeId) {
     filter.employeeId = employeeId;
   }

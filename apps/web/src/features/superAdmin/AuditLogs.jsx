@@ -63,6 +63,7 @@ export default function AuditLogs() {
         .get('/super-admin/advanced/audit-logs', { params })
         .catch(() => apiClient.get('/super-admin/audit-logs', { params }));
 
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const payload = res.data?.data || res.data || {};
       const list = Array.isArray(payload) ? payload : payload.logs || [];
       const pagination = payload.pagination || {};
@@ -87,6 +88,7 @@ export default function AuditLogs() {
     apiClient
       .get('/super-admin/companies?limit=100')
       .then((res) => {
+        if (!res?.data) throw new Error('Access denied or data unavailable');
         const d = res.data?.data || res.data || [];
         setCompanies(Array.isArray(d) ? d : d.companies || d.docs || []);
       })

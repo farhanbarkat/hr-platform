@@ -1,8 +1,7 @@
 import { TaskAttachment } from '../models/taskAttachment.model.js';
 import { Task } from '../models/task.model.js';
 import { Employee } from '../models/employee.model.js';
-import { CustomRole } from '../models/customRole.model.js';
-import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS } from '../config/permissions.js';
+import { PERMISSIONS } from '../config/permissions.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -36,33 +35,12 @@ const resolveFileType = (mimeType = '') => {
  * Dynamically resolves user's effective permissions (Base Role + Custom Role)
  */
 const getUserPermissions = async (user, companyId) => {
-  let permissions = new Set(DEFAULT_ROLE_PERMISSIONS[user.role] || []);
-
-  // 1. Check direct User customRoleId
-  if (user.customRoleId) {
-    const customRole = await CustomRole.findOne({ _id: user.customRoleId, companyId });
-    if (customRole && Array.isArray(customRole.permissions)) {
-      customRole.permissions.forEach((perm) => permissions.add(perm));
-    }
-  }
-
-  // 2. Check linked Employee profile customRoleId
   const employee = await Employee.findOne({
     companyId,
     $or: [{ userId: user._id }, { email: user.email }],
   });
 
-  if (
-    employee?.customRoleId &&
-    (!user.customRoleId || employee.customRoleId.toString() !== user.customRoleId.toString())
-  ) {
-    const empCustomRole = await CustomRole.findOne({ _id: employee.customRoleId, companyId });
-    if (empCustomRole && Array.isArray(empCustomRole.permissions)) {
-      empCustomRole.permissions.forEach((perm) => permissions.add(perm));
-    }
-  }
-
-  return { permissions, employee };
+  return { permissions: new Set(user.permissions || []), employee };
 };
 
 /**
@@ -76,12 +54,7 @@ const assertTaskAccess = async (taskId, companyId, user) => {
     throw new ApiError(404, 'Task not found.');
   }
 
-  // 1. Super Admin, Company Admin, and HR have company-wide access
-  if (['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR'].includes(user.role)) {
-    return task;
-  }
-
-  // 2. Resolve Dynamic Permissions (Custom Role / Base Role)
+  // Resolve the permissions already hydrated by verifyJWT.
   const { permissions, employee } = await getUserPermissions(user, companyId);
 
   // Only Board Managers / Task Admins can bypass individual task membership

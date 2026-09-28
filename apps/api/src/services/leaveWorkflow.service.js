@@ -48,7 +48,7 @@ export const submitLeaveRequest = async ({
   }
 
   // 2. Determine initial status based on Manager availability (Auto-escalation)
-  const employee = await Employee.findById(employeeId);
+  const employee = await Employee.findOne({ _id: employeeId, companyId });
   
   let initialStatus = 'PENDING_MANAGER';
   let isEscalated = false;
@@ -59,7 +59,7 @@ export const submitLeaveRequest = async ({
     initialStatus = 'PENDING_HR';
     isEscalated = true;
   } else {
-    const manager = await Employee.findById(managerId);
+    const manager = await Employee.findOne({ _id: managerId, companyId });
     if (!manager || manager.status !== 'ACTIVE') {
       initialStatus = 'PENDING_HR';
       isEscalated = true;

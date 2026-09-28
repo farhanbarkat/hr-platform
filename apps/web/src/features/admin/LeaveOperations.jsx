@@ -17,6 +17,7 @@ export default function LeaveOperations() {
     try {
       setLoading(true);
       const res = await apiClient.get('/leaves/pending-approvals');
+      if (!res?.data) throw new Error('Access denied or data unavailable');
       const list = res.data?.data || res.data || [];
       setPendingRequests(Array.isArray(list) ? list : []);
     } catch (err) {

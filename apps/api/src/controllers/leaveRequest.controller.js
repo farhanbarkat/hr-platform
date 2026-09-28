@@ -5,21 +5,32 @@ import { ApiError } from '../utils/ApiError.js';
 import { Employee } from '../models/employee.model.js';
 import { LeaveRequest } from '../models/leaveRequest.model.js';
 import { LeaveStatusHistory } from '../models/leaveStatusHistory.model.js';
+import { LeaveType } from '../models/leaveType.model.js';
+import { LeaveBalance } from '../models/leaveBalance.model.js';
 import {
   submitLeaveRequest,
   approveByManager,
   approveByHr,
   rejectLeaveRequest,
 } from '../services/leaveWorkflow.service.js';
+import {
+  initializeCompanyLeaveBalances,
+  seedDefaultLeaveTypes,
+} from '../services/leaveBalance.service.js';
 
 
 export const getEmployeeForUser = async (user) => {
+  const companyId = user.companyId;
+  if (!companyId) {
+    throw new ApiError(400, 'Company context is required to resolve an employee.');
+  }
+
   if (user.employeeId) {
-    const emp = await Employee.findById(user.employeeId);
+    const emp = await Employee.findOne({ _id: user.employeeId, companyId });
     if (emp) return emp;
   }
 
-  let employee = await Employee.findOne({ userId: user._id });
+  let employee = await Employee.findOne({ userId: user._id, companyId });
   if (employee) return employee;
 
   if (user.role === 'COMPANY_ADMIN' || user.role === 'SUPER_ADMIN') {
@@ -158,38 +169,49 @@ export const getMyLeaveRequests = asyncHandler(async (req, res) => {
 
 // 6. Get Pending Approvals (Zero-Dependency & 100% Crash-Proof)
 export const getPendingApprovals = asyncHandler(async (req, res) => {
-  try {
-    const companyId = req.user?.companyId || req.companyId;
+  const companyId = req.companyId || req.user?.companyId;
 
-    const filter = {
-      status: { $in: ['PENDING_MANAGER', 'PENDING_HR', 'PENDING'] },
-    };
-
-    if (companyId) {
-      filter.companyId = companyId;
-    }
-
-    const pendingRequests = await LeaveRequest.find(filter)
-      .sort({ createdAt: 1 })
-      .lean();
-
-    // Plain JSON response to completely bypass any ApiResponse constructor import issues
-    return res.status(200).json({
-      success: true,
-      statusCode: 200,
-      data: pendingRequests || [],
-      message: 'Pending approvals retrieved successfully.'
-    });
-  } catch (error) {
-    console.error('CRITICAL GET PENDING APPROVALS ERROR:', error);
-    // Safe fallback returning plain JSON so server NEVER throws a 500 error
-    return res.status(200).json({
-      success: true,
-      statusCode: 200,
-      data: [],
-      message: 'Safe fallback: No pending requests found.'
-    });
+  // companyId MUST exist — never make tenant scoping optional
+  if (!companyId) {
+    throw new ApiError(400, 'companyId missing from authenticated user — check JWT payload / auth middleware');
   }
+
+  // Confirm these match EXACTLY what's saved in LeaveRequest.status (check your model's enum)
+  const filter = {
+    companyId,
+    status: { $in: ['PENDING_MANAGER', 'PENDING_HR'] },
+  };
+
+  // Department-scoping for Manager role (per TICKET-005C) — a Manager should only
+  // see their own department's pending requests, not the whole company
+  const userPermissions = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
+  let departmentId = req.user?.departmentId;
+
+  if (!departmentId && req.user?.employeeId) {
+    const viewerEmployee = await Employee.findOne({
+      _id: req.user.employeeId,
+      companyId,
+    }).select('departmentId');
+    departmentId = viewerEmployee?.departmentId;
+  }
+
+  if (userPermissions.includes('leave.approve_manager') && departmentId) {
+    const deptEmployeeIds = await Employee.find({
+      companyId,
+      departmentId,
+    }).distinct('_id');
+    filter.employeeId = { $in: deptEmployeeIds };
+  }
+
+  const pendingRequests = await LeaveRequest.find(filter)
+    .sort({ createdAt: 1 })
+    .lean();
+
+  return res.status(200).json(
+    new ApiResponse(200, pendingRequests, 'Pending approvals retrieved successfully.')
+  );
+  // No try/catch here — asyncHandler already forwards real errors to your
+  // error.middleware.js, which should return proper 4xx/5xx with the actual message
 });
 
 export const rejectRequest = rejectLeave;
@@ -403,3 +425,73 @@ export const getLeaveApprovalTurnaroundAnalytics = asyncHandler(
     );
   }
 );
+
+// Leave type and balance operations live here with the workflow operations so
+// leave.routes.js has one controller source of truth.
+export const getLeaveTypes = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user?.companyId;
+  if (!companyId) throw new ApiError(400, 'companyId missing from authenticated user');
+
+  await seedDefaultLeaveTypes(companyId);
+  const leaveTypes = await LeaveType.find({ companyId }).sort({ createdAt: 1 });
+  return res.status(200).json(new ApiResponse(200, leaveTypes, 'Leave types retrieved successfully.'));
+});
+
+export const createLeaveType = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user?.companyId;
+  if (!companyId) throw new ApiError(400, 'companyId missing from authenticated user');
+  const { name, code, defaultAllotment, isPaid, carryForwardMax, description } = req.body;
+
+  if (!name || !code || defaultAllotment === undefined) {
+    throw new ApiError(400, 'Name, uppercase code, and default allotment are required.');
+  }
+
+  const normalizedCode = code.toUpperCase().trim();
+  const existingType = await LeaveType.findOne({ companyId, code: normalizedCode });
+  if (existingType) throw new ApiError(409, `Leave type with code '${normalizedCode}' already exists.`);
+
+  const leaveType = await LeaveType.create({
+    companyId,
+    name: name.trim(),
+    code: normalizedCode,
+    defaultAllotment: Number(defaultAllotment),
+    isPaid: isPaid ?? true,
+    carryForwardMax: carryForwardMax ? Number(carryForwardMax) : 0,
+    description: description || '',
+    isDefault: false,
+  });
+
+  return res.status(201).json(new ApiResponse(201, leaveType, 'Custom leave type created successfully.'));
+});
+
+export const initializeYearlyBalances = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user?.companyId;
+  if (!companyId) throw new ApiError(400, 'companyId missing from authenticated user');
+  const targetYear = req.body.year ? Number(req.body.year) : new Date().getFullYear();
+  const stats = await initializeCompanyLeaveBalances(companyId, targetYear);
+  return res.status(200).json(new ApiResponse(200, stats, `Leave balances initialized for year ${targetYear} successfully.`));
+});
+
+export const getMyLeaveBalances = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user?.companyId;
+  if (!companyId) throw new ApiError(400, 'companyId missing from authenticated user');
+  const currentYear = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+  const userId = req.user?._id || req.user?.id;
+  const employee = await Employee.findOne({ companyId, $or: [{ userId }, { _id: req.user?.employeeId }] });
+  if (!employee) throw new ApiError(404, 'Employee record not found for the current user.');
+
+  const balances = await LeaveBalance.find({ companyId, employeeId: employee._id, year: currentYear })
+    .populate('leaveTypeId', 'name code isPaid defaultAllotment')
+    .sort({ createdAt: 1 });
+  return res.status(200).json(new ApiResponse(200, balances, 'Your leave balances retrieved successfully.'));
+});
+
+export const getEmployeeBalancesByAdmin = asyncHandler(async (req, res) => {
+  const companyId = req.companyId || req.user?.companyId;
+  if (!companyId) throw new ApiError(400, 'companyId missing from authenticated user');
+  const targetYear = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+  const balances = await LeaveBalance.find({ companyId, employeeId: req.params.employeeId, year: targetYear })
+    .populate('leaveTypeId', 'name code isPaid defaultAllotment')
+    .sort({ createdAt: 1 });
+  return res.status(200).json(new ApiResponse(200, balances, 'Employee leave balances retrieved successfully.'));
+});

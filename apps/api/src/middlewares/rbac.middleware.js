@@ -39,12 +39,8 @@ export const requirePermission = (permission, options = {}) => {
     }
 
     // Check permission
-    const hasPerm = await rbacService.hasPermission(
-      req.companyId && req.companyId !== user.companyId
-        ? { ...user, companyId: req.companyId }
-        : user,
-      permission
-    );
+    const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const hasPerm = permissions.includes('*') || permissions.includes(permission);
 
     // Prepare log data
     const logData = {
@@ -106,7 +102,8 @@ export const requireAnyPermission = (permissions, options = {}) => {
       throw new ApiError(401, 'Authentication required.');
     }
 
-    const hasPerm = await rbacService.hasAnyPermission(user, permissions);
+    const userPermissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const hasPerm = userPermissions.includes('*') || permissions.some((permission) => userPermissions.includes(permission));
 
     const logData = {
       companyId,
@@ -144,7 +141,8 @@ export const requireAllPermissions = (permissions, options = {}) => {
       throw new ApiError(401, 'Authentication required.');
     }
 
-    const hasPerm = await rbacService.hasAllPermissions(user, permissions);
+    const userPermissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const hasPerm = userPermissions.includes('*') || permissions.every((permission) => userPermissions.includes(permission));
 
     const logData = {
       companyId,

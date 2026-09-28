@@ -7,7 +7,7 @@ import {
 } from '../controllers/attendance.controller.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
-import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { requirePermission, requireAnyPermission } from '../middlewares/rbac.middleware.js';
 import { enforceReadOnlyImpersonation } from '../middlewares/readOnly.middleware.js';
 import { requireEntitlement } from '../middlewares/entitlement.middleware.js';
 import { PERMISSIONS } from '../config/permissions.js';
@@ -39,7 +39,11 @@ router.post(
 // Kisi ko bhi view attendance ki permission de sakti hai company
 router.get(
   '/',
-  requirePermission(PERMISSIONS.ATTENDANCE.READ),
+  requireAnyPermission([
+    PERMISSIONS.ATTENDANCE.READ,
+    PERMISSIONS.ATTENDANCE.VIEW_TEAM,
+    PERMISSIONS.ATTENDANCE.VIEW_OWN,
+  ]),
   getAttendanceRecords
 );
 

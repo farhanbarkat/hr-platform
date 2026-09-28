@@ -6,7 +6,8 @@ import {
 } from '../controllers/company.controller.js';
 import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { requirePermission, requireRole } from '../middlewares/rbac.middleware.js';
+import { requirePermission } from '../middlewares/rbac.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
 
@@ -14,12 +15,12 @@ const router = Router();
 router.route('/').post(verifyJWT, requirePermission('company.create'), createCompany);
 
 // FIX 1: verifyJWT must run BEFORE tenantMiddleware so req.user is hydrated
-router.route('/me').get(verifyJWT, tenantMiddleware, getCurrentCompany);
+router.route('/me').get(verifyJWT, tenantMiddleware, requirePermission(PERMISSIONS.COMPANY.READ), getCurrentCompany);
 
 // Admin-only configurable settings
 router
   .route('/settings')
-  .put(verifyJWT, tenantMiddleware, requireRole('SUPER_ADMIN', 'COMPANY_ADMIN'), updateCompanySettings)
-  .patch(verifyJWT, tenantMiddleware, requireRole('SUPER_ADMIN', 'COMPANY_ADMIN'), updateCompanySettings);
+  .put(verifyJWT, tenantMiddleware, requirePermission(PERMISSIONS.COMPANY.UPDATE), updateCompanySettings)
+  .patch(verifyJWT, tenantMiddleware, requirePermission(PERMISSIONS.COMPANY.UPDATE), updateCompanySettings);
 
 export default router;

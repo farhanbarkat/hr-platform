@@ -85,7 +85,7 @@ export const getMyLoans = asyncHandler(async (req, res) => {
   });
 
   if (!employee) {
-    return res.status(200).json(new ApiResponse(200, [], 'No employee profile found.'));
+    throw new ApiError(404, 'Employee profile not found.');
   }
 
   const loans = await Loan.find({ companyId, employeeId: employee._id })

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyJWT } from '../middlewares/auth.middleware.js';
+import { tenantMiddleware } from '../middlewares/tenant.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
 import {
   createSalaryStructure,
@@ -9,7 +10,7 @@ import {
 
 const router = Router();
 
-router.use(verifyJWT);
+router.use(verifyJWT, tenantMiddleware);
 
 router.route('/').post(requirePermission('payroll.update'), createSalaryStructure);
 router.route('/employee/:employeeId/active').get(requirePermission('payroll.read'), getActiveSalary);

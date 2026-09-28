@@ -48,6 +48,9 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
 
     if (cachedTenant) {
       const parsed = JSON.parse(cachedTenant);
+      if (parsed.isActive === false) {
+        throw new ApiError(403, 'Company access is currently deactivated.');
+      }
       req.tenant = parsed;
       req.company = parsed;
       req.companyId = new mongoose.Types.ObjectId(resolvedCompanyId);
@@ -60,7 +63,7 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
   // 4. Fallback to Database on Cache Miss
   const company = await Company.findById(resolvedCompanyId).lean();
 
-  if (!company) {
+  if (!company || company.isActive === false) {
     throw new ApiError(404, 'Invalid or deactivated company context.');
   }
 

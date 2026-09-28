@@ -4,9 +4,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model.js';
 import { Employee } from '../models/employee.model.js';
-import { RoleCapabilityOverride } from '../models/roleCapabilityOverride.model.js';
-import { CustomRole } from '../models/customRole.model.js';
-import { DEFAULT_ROLE_PERMISSIONS } from '../config/permissions.js';
+import { rbacService } from '../services/rbac.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -14,7 +12,9 @@ import {
   generateAccessToken,
   generateRefreshToken,
   generate2FAChallengeToken,
+  verifyToken,
   hashToken,
+  TOKEN_TYPES,
 } from '../utils/token.util.js';
 
 const cookieOptions = {
@@ -27,55 +27,13 @@ const cookieOptions = {
 const MANDATORY_2FA_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR'];
 
 const getChallengeUserId = (req) => req.challengeUser?._id;
+const getChallengeCompanyId = (req) => req.challengeUser?.companyId;
 
 /**
  * Helper to resolve dynamic effective permissions during login/token generation
  */
 const resolveUserPermissionsForToken = async (user) => {
-  const baseRole = String(user.role || 'EMPLOYEE').toUpperCase();
-  if (baseRole === 'SUPER_ADMIN' || user.isCompanyOwner) {
-    return ['*'];
-  }
-
-  try {
-    const employee = await Employee.findOne({
-      $or: [{ userId: user._id }, { email: user.email }],
-      companyId: user.companyId,
-    }).populate('customRoleId');
-
-    let effectivePermissions = [];
-
-    if (employee?.customRoleId?.permissions && Array.isArray(employee.customRoleId.permissions)) {
-      effectivePermissions = [...employee.customRoleId.permissions];
-    } else {
-      effectivePermissions = DEFAULT_ROLE_PERMISSIONS[user.role] || [];
-    }
-
-    if (employee) {
-      const override = await RoleCapabilityOverride.findOne({
-        companyId: user.companyId,
-        employeeId: employee._id,
-      });
-
-      if (override) {
-        const granted = override.grantedPermissions || [];
-        const removed = new Set(override.removedPermissions || []);
-
-        granted.forEach((p) => {
-          if (!effectivePermissions.includes(p)) effectivePermissions.push(p);
-        });
-
-        if (removed.size > 0) {
-          effectivePermissions = effectivePermissions.filter((perm) => !removed.has(perm));
-        }
-      }
-    }
-
-    return effectivePermissions;
-  } catch (err) {
-    console.error('Error resolving token permissions:', err);
-    return DEFAULT_ROLE_PERMISSIONS[user.role] || [];
-  }
+  return rbacService.getEffectivePermissions(user);
 };
 
 /**
@@ -120,8 +78,22 @@ export const login = asyncHandler(async (req, res) => {
   user.lockUntil = null;
   await user.save();
 
-  const hasEnrolledSecret = Boolean(user.twoFactorSecret);
-  const requires2FA = (user.isTwoFactorEnabled || MANDATORY_2FA_ROLES.includes(user.role)) && hasEnrolledSecret;
+  const hasEnrolledSecret = Boolean(user.twoFactorSecret && user.isTwoFactorEnabled);
+  const isMandatoryRole = MANDATORY_2FA_ROLES.includes(user.role);
+
+  // Fixed: Prevent mandatory role bypass if 2FA is not yet enrolled (resolves deadlock via challenge)
+  if (isMandatoryRole && !hasEnrolledSecret) {
+    const challengeToken = generate2FAChallengeToken(user);
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        { requires2FA: true, isEnrolled: false, challengeToken },
+        'Mandatory 2FA setup required for your role.'
+      )
+    );
+  }
+
+  const requires2FA = user.isTwoFactorEnabled && hasEnrolledSecret;
 
   if (requires2FA) {
     const challengeToken = generate2FAChallengeToken(user);
@@ -134,7 +106,6 @@ export const login = asyncHandler(async (req, res) => {
     );
   }
 
-  // ✅ Attach resolved dynamic permissions to user object before generating tokens
   const permissions = await resolveUserPermissionsForToken(user);
   user.permissions = permissions;
 
@@ -170,7 +141,10 @@ export const login = asyncHandler(async (req, res) => {
  */
 export const setup2FA = asyncHandler(async (req, res) => {
   const userId = getChallengeUserId(req) || req.user?._id;
-  const user = await User.findById(userId);
+  const user = await User.findOne({
+    _id: userId,
+    companyId: getChallengeCompanyId(req),
+  });
 
   if (!user) {
     throw new ApiError(404, 'User not found.');
@@ -212,7 +186,10 @@ export const setup2FA = asyncHandler(async (req, res) => {
 export const confirm2FASetup = asyncHandler(async (req, res) => {
   const { code } = req.body || {};
   const userId = getChallengeUserId(req) || req.user?._id;
-  const user = await User.findById(userId).select('+twoFactorSecret');
+  const user = await User.findOne({
+    _id: userId,
+    companyId: getChallengeCompanyId(req),
+  }).select('+twoFactorSecret');
 
   if (!code) {
     throw new ApiError(400, 'Verification code is required.');
@@ -255,9 +232,10 @@ export const verify2FALogin = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid or expired 2FA challenge session. Please log in again.');
   }
 
-  const user = await User.findById(userId).select(
-    '+twoFactorSecret +twoFactorRecoveryCodes'
-  );
+  const user = await User.findOne({
+    _id: userId,
+    companyId: getChallengeCompanyId(req),
+  }).select('+twoFactorSecret +twoFactorRecoveryCodes');
 
   if (!user) {
     throw new ApiError(404, 'User not found.');
@@ -337,12 +315,16 @@ export const refreshToken = asyncHandler(async (req, res) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(incomingRefreshToken, process.env.JWT_REFRESH_SECRET);
+    // Fixed: Enforce strict TOKEN_TYPES.REFRESH validation via shared verifyToken utility
+    decoded = verifyToken(incomingRefreshToken, process.env.JWT_REFRESH_SECRET, TOKEN_TYPES.REFRESH);
   } catch (err) {
     throw new ApiError(401, 'Invalid or expired refresh token.');
   }
 
-  const user = await User.findById(decoded._id);
+  const user = await User.findOne({
+    _id: decoded._id,
+    companyId: decoded.companyId,
+  });
   if (!user) {
     throw new ApiError(404, 'User not found.');
   }
@@ -380,11 +362,13 @@ export const refreshToken = asyncHandler(async (req, res) => {
 export const logout = asyncHandler(async (req, res) => {
   const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
-  if (incomingRefreshToken && req.user?._id) {
+  if (incomingRefreshToken) {
     const incomingHash = hashToken(incomingRefreshToken);
-    await User.findByIdAndUpdate(req.user._id, {
-      $pull: { refreshTokens: { tokenHash: incomingHash } },
-    });
+    // Fixed: Revoke refresh token directly from DB even if access token is expired
+    await User.findOneAndUpdate(
+      { 'refreshTokens.tokenHash': incomingHash },
+      { $pull: { refreshTokens: { tokenHash: incomingHash } } }
+    );
   }
 
   return res
@@ -439,8 +423,7 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Active user session not found.');
   }
 
-  const permissions = await resolveUserPermissionsForToken(user);
-  user.permissions = permissions;
+  user.permissions = req.user.permissions || [];
 
   delete user.password;
   delete user.twoFactorSecret;

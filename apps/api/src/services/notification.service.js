@@ -31,7 +31,6 @@ export class NotificationService {
     // 1. In-App Notification (Database mein save karna for Notification Bell)
     if (channels.includes('IN_APP') && recipientId) {
       try {
-        // Agar companyId pass nahi hui to recipient employee/user se resolve karlein
         let resolvedCompanyId = companyId;
         if (!resolvedCompanyId) {
           const emp = await Employee.findOne({ $or: [{ userId: recipientId }, { _id: recipientId }] });
@@ -74,7 +73,7 @@ export class NotificationService {
       }
     }
 
-    // 3. Push & SMS Stubs (Phase 4 scope)
+    // 3. Push & SMS Stubs
     if (channels.includes('PUSH')) {
       console.log(`[PUSH STUB] Push notification dispatched for user ${recipientId}`);
     }
@@ -136,13 +135,12 @@ export class NotificationService {
     return { alertSent: false, threshold };
   }
 
- /**
+  /**
    * TICKET-021: Broadcast announcement notifications to target audience employees
    */
   static async notifyAnnouncement({ announcement, companyId }) {
     let query = { companyId };
 
-    // Case-insensitive active check
     if (announcement.targetAudience === 'department' && announcement.targetDepartmentId) {
       query.departmentId = announcement.targetDepartmentId;
     } else if (announcement.targetAudience === 'team' && announcement.targetTeamId) {
@@ -151,7 +149,6 @@ export class NotificationService {
 
     const employees = await Employee.find(query).select('_id userId email firstName lastName');
 
-    // Collect recipient user IDs
     const recipientUserIds = new Set();
 
     employees.forEach((emp) => {
@@ -162,7 +159,6 @@ export class NotificationService {
       }
     });
 
-    // For company-wide ("all") announcements, ensure all registered company users receive it
     if (announcement.targetAudience === 'all') {
       const { User } = await import('../models/user.model.js');
       const companyUsers = await User.find({ companyId }).select('_id');
