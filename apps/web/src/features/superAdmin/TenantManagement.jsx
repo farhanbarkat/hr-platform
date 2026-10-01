@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
+import { tokenStorage } from '../../lib/tokenStorage.js';
 
 export default function TenantManagement() {
   const location = useLocation();
@@ -16,6 +17,9 @@ export default function TenantManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
+  const [showImpersonationModal, setShowImpersonationModal] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState(null);
+  const [impersonationReason, setImpersonationReason] = useState('');
 
   // Form matching backend controller exactly
   const [formData, setFormData] = useState({
@@ -83,20 +87,33 @@ export default function TenantManagement() {
     e.preventDefault();
     setFormError('');
     setSuccessNotice('');
+
+    const payload = {
+      name: formData.legalName.trim(),
+      slug: formData.slug.trim(),
+      currency: formData.baseCurrency,
+      timezone: formData.defaultTimezone,
+      adminFirstName: formData.adminFirstName.trim(),
+      adminLastName: formData.adminLastName.trim(),
+      adminEmail: formData.adminEmail.trim().toLowerCase(),
+    };
+
+    const requiredFields = [
+      ['Company name', payload.name],
+      ['Company slug', payload.slug],
+      ['Admin first name', payload.adminFirstName],
+      ['Admin last name', payload.adminLastName],
+      ['Admin email', payload.adminEmail],
+    ];
+    const missingField = requiredFields.find(([, value]) => !value);
+    if (missingField) {
+      setFormError(`${missingField[0]} is required.`);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const payload = {
-        name: formData.legalName.trim(),
-        slug: formData.slug.trim(),
-        currency: formData.baseCurrency,
-        timezone: formData.defaultTimezone,
-        adminFirstName: formData.adminFirstName.trim(),
-        adminLastName: formData.adminLastName.trim() || 'Admin',
-        adminEmail: formData.adminEmail.trim().toLowerCase(),
-        plan: formData.subscriptionTier,
-      };
-
       await apiClient.post('/super-admin/companies', payload);
 
       setSuccessNotice(`Tenant "${formData.legalName}" provisioned successfully!`);
@@ -142,6 +159,38 @@ export default function TenantManagement() {
     } catch (err) {
       console.error('Failed to change tenant status:', err);
       alert('Failed to update tenant status.');
+    }
+  };
+
+  const handleStartImpersonation = async (event) => {
+    event.preventDefault();
+    const reason = impersonationReason.trim();
+    if (!selectedTenant || reason.length < 10) {
+      setFormError('Enter an impersonation reason with at least 10 characters.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setFormError('');
+      const response = await apiClient.post(
+        `/super-admin/companies/${selectedTenant._id}/impersonate`,
+        { reason }
+      );
+      const payload = response.data?.data || response.data || {};
+      if (!payload.impersonationToken) throw new Error('Impersonation token was not returned.');
+
+      sessionStorage.setItem('impersonation_previous_token', tokenStorage.getAccessToken() || '');
+      sessionStorage.setItem('impersonation_active', reason);
+      sessionStorage.setItem('impersonated_company_name', selectedTenant.name || 'Tenant');
+      tokenStorage.setAccessToken(payload.impersonationToken);
+      setShowImpersonationModal(false);
+      setImpersonationReason('');
+      window.location.href = '/company-admin/overview';
+    } catch (err) {
+      setFormError(err.response?.data?.message || err.message || 'Failed to start impersonation.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -243,6 +292,7 @@ export default function TenantManagement() {
                 <th className="py-3 px-4">Tenant Slug</th>
                 <th className="py-3 px-4">Base Currency</th>
                 <th className="py-3 px-4">Timezone</th>
+                <th className="py-3 px-4">Employees</th>
                 <th className="py-3 px-4">Plan Tier</th>
                 <th className="py-3 px-4 text-right">Status / Access</th>
               </tr>
@@ -250,13 +300,13 @@ export default function TenantManagement() {
             <tbody className="divide-y divide-[#EAE7DF] text-xs font-sans">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="py-10 text-center font-mono text-xs text-[#5B6B79]">
+                  <td colSpan="7" className="py-10 text-center font-mono text-xs text-[#5B6B79]">
                     Hydrating platform tenant registry...
                   </td>
                 </tr>
               ) : filteredTenants.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-10 text-center font-mono text-xs text-[#5B6B79]">
+                  <td colSpan="7" className="py-10 text-center font-mono text-xs text-[#5B6B79]">
                     No matching tenants provisioned. Click "+ Provision New Tenant" to start.
                   </td>
                 </tr>
@@ -264,7 +314,7 @@ export default function TenantManagement() {
                 filteredTenants.map((t) => {
                   const isActive = t.isActive ?? t.status === 'ACTIVE';
                   return (
-                    <tr key={t._id} className="hover:bg-[#FAF9F6]/80 transition-colors">
+                    <tr key={t._id} className={`${isActive ? 'hover:bg-[#FAF9F6]/80' : 'bg-[#FFF4F1]/60 opacity-80'} transition-colors`}>
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-[#16233B]">{t.name}</div>
                         <div className="text-[10px] font-mono text-[#5B6B79]">
@@ -278,7 +328,10 @@ export default function TenantManagement() {
                         {t.currency || 'USD'}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-[11px] text-[#5B6B79]">
-                        {t.timezone || 'America/New_York'}
+                        {t.defaultTimezone || t.timezone || 'America/New_York'}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-[#16233B]">
+                        {t.employeeCount ?? t.headcount ?? 0}
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="px-2 py-0.5 rounded bg-[#FAF6EC] border border-[#E9DFBA] text-[#B9812E] font-mono text-[10px] font-bold uppercase">
@@ -286,15 +339,32 @@ export default function TenantManagement() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isActive}
-                            onChange={() => handleToggleStatus(t._id, isActive)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-8 h-4 bg-[#D8D3C7] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#D8D3C7] after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#2E7D5B]"></div>
-                        </label>
+                        <div className="flex items-center justify-end gap-3">
+                          <span className={`text-[9px] font-mono font-bold ${isActive ? 'text-[#2E7D5B]' : 'text-[#B3432E]'}`}>
+                            {isActive ? 'ACTIVE' : 'SUSPENDED'}
+                          </span>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isActive}
+                              onChange={() => handleToggleStatus(t._id, isActive)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-8 h-4 bg-[#D8D3C7] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#D8D3C7] after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#2E7D5B]"></div>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTenant(t);
+                              setFormError('');
+                              setShowImpersonationModal(true);
+                            }}
+                            disabled={!isActive}
+                            className="text-[10px] font-mono font-bold text-[#B9812E] hover:underline disabled:text-[#9E9B93] disabled:no-underline"
+                          >
+                            IMPERSONATE
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -477,6 +547,64 @@ export default function TenantManagement() {
                 >
                   <span>{submitting ? 'Provisioning...' : 'Provision Company'}</span>
                   <span>&rarr;</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showImpersonationModal && selectedTenant && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg border border-[#D8D3C7] shadow-2xl w-full max-w-[520px] overflow-hidden">
+            <div className="p-5 border-b border-[#EAE7DF] bg-[#FAF9F6] flex justify-between items-start gap-4">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#B9812E] font-bold">SECURE SUPPORT ACCESS</span>
+                <h2 className="text-base font-bold text-[#16233B] mt-1">Impersonate {selectedTenant.name}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImpersonationModal(false)}
+                className="text-sm text-[#5B6B79] hover:text-[#16233B] cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleStartImpersonation} className="p-6 space-y-4 text-xs">
+              <p className="text-[#5B6B79] leading-relaxed">
+                This creates a temporary read-only tenant session and records your reason in the audit log.
+              </p>
+              {formError && (
+                <div className="p-3 bg-[#B3432E]/10 border border-[#B3432E]/30 text-[#B3432E] rounded font-mono text-[11px]">
+                  {formError}
+                </div>
+              )}
+              <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                Reason for impersonation *
+                <textarea
+                  required
+                  minLength={10}
+                  rows={4}
+                  value={impersonationReason}
+                  onChange={(e) => setImpersonationReason(e.target.value)}
+                  placeholder="Describe the support or investigation reason..."
+                  className="mt-1 w-full px-3 py-2 bg-[#FAF9F6] border border-[#D8D3C7] rounded text-xs font-sans text-[#16233B] outline-none focus:border-[#B9812E]"
+                />
+              </label>
+              <div className="pt-4 flex justify-end gap-3 border-t border-[#EAE7DF]">
+                <button
+                  type="button"
+                  onClick={() => setShowImpersonationModal(false)}
+                  className="px-4 py-2 bg-white border border-[#D8D3C7] text-xs font-mono text-[#5B6B79] rounded hover:bg-[#FAF9F6] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || impersonationReason.trim().length < 10}
+                  className="px-5 py-2 bg-[#B9812E] hover:bg-[#a57227] text-white rounded text-xs font-mono font-semibold cursor-pointer disabled:opacity-60"
+                >
+                  {submitting ? 'Starting...' : 'Start Read-only Session'}
                 </button>
               </div>
             </form>

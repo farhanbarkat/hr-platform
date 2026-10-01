@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PERMISSIONS } from '../../config/permissions.js';
@@ -11,7 +11,6 @@ export default function PayrollCompensation() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
-  const [runs, setRuns] = useState([]);
   const [activeRun, setActiveRun] = useState(null);
   const [payslips, setPayslips] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,8 +38,6 @@ export default function PayrollCompensation() {
       const res = await apiClient.get('/payroll/runs');
       if (!res?.data) throw new Error('Access denied or data unavailable');
       const runsList = res.data?.data || [];
-      setRuns(runsList);
-
       const matched = runsList.find(
         (r) => r.period?.month === Number(selectedMonth) && r.period?.year === Number(selectedYear)
       );
@@ -54,7 +51,6 @@ export default function PayrollCompensation() {
       }
     } catch (err) {
       console.error('Failed to fetch payroll runs:', err);
-      setRuns([]);
       setPayslips([]);
     } finally {
       setLoading(false);
@@ -74,7 +70,8 @@ export default function PayrollCompensation() {
   };
 
   useEffect(() => {
-    fetchRuns();
+    const timeout = setTimeout(() => fetchRuns(), 0);
+    return () => clearTimeout(timeout);
   }, [selectedMonth, selectedYear]);
 
   // 3. Stage 1 & 2: Calculate Run
@@ -164,7 +161,7 @@ export default function PayrollCompensation() {
           ok: true,
         });
       }
-    } catch (err) {
+    } catch {
       setInspectSlip(slip);
       setFeedback({
         text: 'Cloud PDF engine offline. Opened printable payslip view for instant PDF saving.',
@@ -186,6 +183,10 @@ export default function PayrollCompensation() {
     const term = search.toLowerCase();
     return name.includes(term) || code.includes(term);
   });
+
+  const missingData = Array.isArray(activeRun?.validationErrors) ? activeRun.validationErrors : [];
+  const allPayslipsCalculated = payslips.length > 0 && payslips.every((slip) => ['CALCULATED', 'APPROVED', 'PAID'].includes(slip.status));
+  const canApproveRun = activeRun?.status === 'CALCULATED' && missingData.length === 0 && allPayslipsCalculated;
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -250,7 +251,8 @@ export default function PayrollCompensation() {
               {activeRun?.status === 'CALCULATED' && (
                 <button
                   onClick={handleApprovePayroll}
-                  disabled={executing}
+                  disabled={executing || !canApproveRun}
+                  title={!canApproveRun ? 'Every employee must have a successfully calculated payslip before approval.' : 'Approve and lock this payroll run'}
                   className="px-4 py-1.5 bg-[#1E7E34] hover:bg-[#18662A] text-white text-xs font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
                 >
                   ✓ APPROVE & LOCK
@@ -271,6 +273,25 @@ export default function PayrollCompensation() {
           {feedback.ok ? '✓ ' : '⚠️ '}
           {feedback.text}
         </div>
+      )}
+
+      {missingData.length > 0 && (
+        <div className="rounded-lg border border-[#F5C2BA] bg-[#FDEEEB] p-4">
+          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-[#B83E28]">Calculation blocked: missing employee data</h2>
+              <p className="mt-1 text-xs text-[#5B6B79]">Payroll cannot be approved or completed until every listed employee has the required data.</p>
+            </div>
+            <span className="font-mono text-lg font-bold text-[#B83E28]">{missingData.length} blocked</span>
+          </div>
+          <div className="mt-3 overflow-x-auto rounded border border-[#F5C2BA] bg-white">
+            <table className="w-full text-left text-xs"><thead className="bg-[#FDEEEB] text-[10px] font-mono uppercase text-[#B83E28]"><tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Required action</th></tr></thead><tbody className="divide-y divide-[#F5C2BA]">{missingData.map((item) => <tr key={item.employeeId}><td className="px-3 py-2 font-bold text-[#16233B]">{item.employeeName || item.employeeId}</td><td className="px-3 py-2 text-[#5B6B79]">{item.reason || 'Complete the required payroll data.'}</td></tr>)}</tbody></table>
+          </div>
+        </div>
+      )}
+
+      {activeRun?.status === 'CALCULATED' && missingData.length === 0 && !allPayslipsCalculated && (
+        <div className="rounded border border-[#E8D4B5] bg-[#FAF4E8] p-3 text-xs text-[#8C5D17]">Approval is locked until every employee has a calculated payslip. Calculated slips: {payslips.filter((slip) => slip.status === 'CALCULATED').length} of {payslips.length}.</div>
       )}
 
       {/* 2. Top Stats Ribbon */}

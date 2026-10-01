@@ -175,13 +175,20 @@ export function AuthProvider({ children }) {
   const verify2FA = async (challengeToken, code, isEnrolled = true) => {
     setLoading(true);
     try {
-      const endpoint = !isEnrolled ? '/auth/2fa/confirm' : '/auth/2fa/verify-login';
       const cleanCode = String(code).trim();
 
+      const requestConfig = {
+        headers: { Authorization: `Bearer ${challengeToken}` },
+      };
+
+      if (!isEnrolled) {
+        await apiClient.post('/auth/2fa/confirm', { code: cleanCode }, requestConfig);
+      }
+
       const response = await apiClient.post(
-        endpoint,
+        '/auth/2fa/verify-login',
         { totpToken: cleanCode, code: cleanCode },
-        { headers: { Authorization: `Bearer ${challengeToken}` } }
+        requestConfig
       );
 
       const payload = response.data?.data || response.data || {};
@@ -199,6 +206,10 @@ export function AuthProvider({ children }) {
 
         setToken(accessToken);
         setUser(userData);
+      }
+
+      if (!accessToken || !userData) {
+        throw new Error('Malformed authentication response. Please try again.');
       }
 
       setLoading(false);

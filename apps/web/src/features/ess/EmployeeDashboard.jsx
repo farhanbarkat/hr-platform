@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -6,6 +6,9 @@ import ApplyLeaveModal from '../leave/ApplyLeaveModal.jsx';
 import AttendancePunchCard from '../attendance/AttendancePunchCard.jsx';
 import ProposeShiftSwapModal from './ProposeShiftSwapModal.jsx';
 import ShiftSwapDesk from '../shifts/ShiftSwapDesk.jsx';
+import PromotionOffersPanel from './PromotionOffersPanel.jsx';
+import AnnouncementFeed from '../../components/AnnouncementFeed.jsx';
+import PayslipDownloadButton from '../payroll/PayslipDownloadButton.jsx';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -61,9 +64,11 @@ export default function EmployeeDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchDashboard();
-    fetchMyLoans();
-  }, [fetchDashboard, fetchMyLoans]);
+    const timeout = setTimeout(() => {
+      fetchDashboard();
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [fetchDashboard]);
 
   // 3. Handle Loan Submission directly from ESS
   const handleApplyLoan = async (e) => {
@@ -165,6 +170,10 @@ export default function EmployeeDashboard() {
           </button>
         </div>
       </div>
+
+      <PromotionOffersPanel />
+
+      <AnnouncementFeed />
 
       {/* Global Feedback Banner for Loans */}
       {loanFeedback && (
@@ -501,7 +510,7 @@ export default function EmployeeDashboard() {
             </div>
           ) : (
             payslips.map((slip) => (
-              <div key={slip._id} className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-center">
+              <div key={slip._id} className="p-3 bg-[#FAF8F5] border border-[#EFECE6] rounded flex justify-between items-center gap-3">
                 <div>
                   <div className="text-xs font-bold text-[#16233B]">
                     {new Date(0, slip.payPeriodMonth - 1).toLocaleString('en-US', { month: 'short' })} {slip.payPeriodYear}
@@ -510,9 +519,12 @@ export default function EmployeeDashboard() {
                     Net: <b className="text-[#16233B]">{slip.netPay?.toLocaleString()} PKR</b>
                   </div>
                 </div>
-                <span className="text-[9px] font-mono px-2 py-0.5 rounded font-bold bg-[#EBF7F0] text-[#1E7E34] border border-[#C6EAD3]">
-                  {slip.status}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded font-bold bg-[#EBF7F0] text-[#1E7E34] border border-[#C6EAD3]">
+                    {slip.status}
+                  </span>
+                  <PayslipDownloadButton payslip={slip} />
+                </div>
               </div>
             ))
           )}

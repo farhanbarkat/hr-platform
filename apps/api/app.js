@@ -43,6 +43,7 @@ import taxCertificateRouter from './src/routes/taxCertificate.routes.js';
 import financeRouter from './src/routes/finance.routes.js';
 import helpdeskRouter from './src/routes/helpdesk.routes.js';
 import chatRouter from './src/routes/chat.routes.js';
+import promotionRouter from './src/routes/promotion.routes.js';
 
 const app = express();
 
@@ -172,6 +173,7 @@ app.use('/api/v1/helpdesk', helpdeskRouter);
 
 // Under your API v1 routes block:
 app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/promotions', promotionRouter);
 
 // Global Error Handler
 app.use(errorHandler); 

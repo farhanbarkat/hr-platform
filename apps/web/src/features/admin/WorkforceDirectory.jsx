@@ -1,18 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PERMISSIONS } from '../../config/permissions.js';
 import EmployeeDocumentsPanel from '../employees/EmployeeDocumentsPanel.jsx';
 
 export default function WorkforceDirectory() {
-  const { isSuperAdmin, user, hasPermission } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
   const navigate = useNavigate();
 
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('ALL');
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [savingEmployee, setSavingEmployee] = useState(false);
+  const [editForm, setEditForm] = useState(null);
 
   // Onboarding Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,16 +40,21 @@ export default function WorkforceDirectory() {
     basicSalary: 150000,
   });
 
-  const canManage =
+  const managementRoles = ['COMPANY_ADMIN', 'ADMIN', 'HR', 'HR_MANAGER'];
+  const isEmployeeManager = managementRoles.includes(String(user?.role || '').toUpperCase());
+  const canManage = isSuperAdmin || isEmployeeManager;
+
+  const canEditEmployee =
     isSuperAdmin ||
-    user?.role === 'COMPANY_ADMIN' ||
-    user?.role === 'ADMIN' ||
-    hasPermission(PERMISSIONS.EMPLOYEE.CREATE);
+    isEmployeeManager;
 
   const fetchEmployees = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/employees?limit=200');
+      const params = new URLSearchParams({ limit: '200' });
+      if (departmentFilter !== 'ALL') params.set('department', departmentFilter);
+      if (search.trim()) params.set('search', search.trim());
+      const res = await apiClient.get(`/employees?${params.toString()}`);
       if (!res?.data) throw new Error('Access denied or data unavailable');
       const raw = res.data?.data || res.data || [];
       const list = Array.isArray(raw) ? raw : raw.employees || [];
@@ -68,15 +78,78 @@ export default function WorkforceDirectory() {
       if (safeDepts.length > 0 && !form.departmentId) {
         setForm((prev) => ({ ...prev, departmentId: safeDepts[0]._id }));
       }
-    } catch (err) {
+    } catch {
       console.warn('Failed to load departments');
     }
   };
 
   useEffect(() => {
-    fetchEmployees();
-    fetchDepartments();
-  }, []);
+    const timeout = setTimeout(() => {
+      fetchEmployees();
+      fetchDepartments();
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [departmentFilter]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => fetchEmployees(), 250);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
+  const openEmployee = async (employee) => {
+    try {
+      setDetailLoading(true);
+      setDetailError('');
+      const response = await apiClient.get(`/employees/${employee._id}`);
+      const payload = response.data?.data || response.data || {};
+      const profile = payload.employee || employee;
+      setSelectedEmployee({ ...profile, directReports: payload.directReports || [] });
+      setEditForm({
+        firstName: profile.firstName || '',
+        lastName: profile.lastName || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        cnic: profile.cnic || '',
+        designation: profile.designation || '',
+        departmentId: profile.departmentId?._id || profile.department?._id || profile.departmentId || '',
+        managerId: profile.managerId?._id || profile.managerId || '',
+        employmentStatus: profile.employmentStatus || 'ACTIVE',
+        dateOfJoining: profile.dateOfJoining ? String(profile.dateOfJoining).slice(0, 10) : '',
+      });
+    } catch (err) {
+      setDetailError(err.response?.data?.message || 'Unable to load employee profile.');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeEmployee = () => {
+    setSelectedEmployee(null);
+    setEditForm(null);
+    setDetailError('');
+  };
+
+  const handleEmployeeSave = async (event) => {
+    event.preventDefault();
+    if (!selectedEmployee || !editForm) return;
+
+    try {
+      setSavingEmployee(true);
+      setDetailError('');
+      const response = await apiClient.put(`/employees/${selectedEmployee._id}`, {
+        ...editForm,
+        department: editForm.departmentId,
+        departmentId: editForm.departmentId,
+      });
+      const updated = response.data?.data || response.data;
+      setSelectedEmployee((current) => ({ ...current, ...updated }));
+      setEmployees((current) => current.map((employee) => employee._id === selectedEmployee._id ? { ...employee, ...updated } : employee));
+    } catch (err) {
+      setDetailError(err.response?.data?.message || 'Unable to save employee profile.');
+    } finally {
+      setSavingEmployee(false);
+    }
+  };
 
   const handleOnboardSubmit = async (e) => {
     e.preventDefault();
@@ -175,11 +248,13 @@ export default function WorkforceDirectory() {
       emp.departmentId?.name ||
       ''
     ).toLowerCase();
+    const employeeDepartment = emp.department?._id || emp.departmentId?._id || emp.departmentId;
     return (
       fullName.includes(term) ||
       email.includes(term) ||
       designation.includes(term) ||
-      dept.includes(term)
+      dept.includes(term) &&
+      (departmentFilter === 'ALL' || employeeDepartment === departmentFilter)
     );
   });
 
@@ -228,6 +303,19 @@ export default function WorkforceDirectory() {
             className="w-full px-3 py-1.5 border border-[#D8D3C7] rounded text-xs focus:outline-none focus:border-[#8C5D17] bg-[#FAF8F5]/50 font-sans"
           />
         </div>
+        <select
+          value={departmentFilter}
+          onChange={(event) => setDepartmentFilter(event.target.value)}
+          className="min-w-44 px-3 py-1.5 border border-[#D8D3C7] rounded text-xs bg-white text-[#16233B] focus:outline-none focus:border-[#8C5D17]"
+          aria-label="Filter employees by department"
+        >
+          <option value="ALL">All departments</option>
+          {departments.map((department) => (
+            <option key={department._id || department.id} value={department._id || department.id}>
+              {department.name}
+            </option>
+          ))}
+        </select>
         <span className="text-[11px] font-mono text-[#728294]">
           Showing {filteredEmployees.length} of {employees.length}
         </span>
@@ -268,7 +356,8 @@ export default function WorkforceDirectory() {
               filteredEmployees.map((emp) => (
                 <tr
                   key={emp._id}
-                  className="hover:bg-[#FAF8F5]/60 transition-colors"
+                  className="hover:bg-[#FAF8F5]/60 transition-colors cursor-pointer"
+                  onClick={() => openEmployee(emp)}
                 >
                   <td className="py-3.5 px-4">
                     <div className="font-bold text-[#16233B]">
@@ -298,7 +387,19 @@ export default function WorkforceDirectory() {
                   </td>
                   <td className="py-3.5 px-4 text-right space-x-2">
                     <button
-                      onClick={() => setDocumentsEmployee(emp)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openEmployee(emp);
+                      }}
+                      className="px-2.5 py-1 bg-[#16233B] hover:bg-[#263A59] text-white text-[10px] font-mono font-bold rounded cursor-pointer transition-colors"
+                    >
+                      VIEW PROFILE
+                    </button>
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setDocumentsEmployee(emp);
+                      }}
                       className="px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#FAF4E8] border border-[#D8D3C7] text-[#8C5D17] text-[10px] font-mono font-bold rounded cursor-pointer transition-colors"
                       title="Manage employee documents"
                     >
@@ -616,6 +717,79 @@ export default function WorkforceDirectory() {
                   >
                     {submitting ? 'PROVISIONING...' : 'CONFIRM ONBOARDING'}
                   </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {selectedEmployee && editForm && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-[#E3DED4] bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#E3DED4] bg-[#FAF8F5] px-6 py-4">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#728294]">Employee Profile // {selectedEmployee.employeeId || 'PROFILE'}</span>
+                <h2 className="mt-1 text-xl font-serif font-bold text-[#16233B]">{selectedEmployee.firstName} {selectedEmployee.lastName}</h2>
+              </div>
+              <button type="button" onClick={closeEmployee} className="p-1 text-xl text-[#728294] hover:text-[#16233B]">&times;</button>
+            </div>
+
+            {detailLoading ? (
+              <div className="p-10 text-center text-xs font-mono text-[#728294]">Loading employee profile...</div>
+            ) : (
+              <form onSubmit={handleEmployeeSave} className="space-y-5 p-6">
+                {detailError && <div className="rounded border border-[#F5C2BA] bg-[#FDEEEB] p-3 text-xs text-[#B83E28]">{detailError}</div>}
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {[
+                      ['firstName', 'First name'], ['lastName', 'Last name'], ['email', 'Corporate email'],
+                      ['cnic', 'CNIC'], ['phone', 'Phone'], ['designation', 'Designation'], ['dateOfJoining', 'Date of joining'],
+                    ].map(([field, label]) => (
+                      <label key={field} className="text-[10px] font-mono font-bold uppercase text-[#728294]">
+                        {label}
+                        <input
+                          type={field === 'dateOfJoining' ? 'date' : field === 'email' ? 'email' : 'text'}
+                          value={editForm[field] || ''}
+                          disabled={!canEditEmployee || field === 'cnic' || field === 'email'}
+                          onChange={(event) => setEditForm((current) => ({ ...current, [field]: event.target.value }))}
+                          className="mt-1 w-full rounded border border-[#D8D3C7] bg-white px-3 py-2 text-xs font-sans normal-case text-[#16233B] outline-none focus:border-[#8C5D17] disabled:bg-[#F3F1ED] disabled:text-[#728294]"
+                        />
+                      </label>
+                    ))}
+                    <label className="text-[10px] font-mono font-bold uppercase text-[#728294]">
+                      Department
+                      <select value={editForm.departmentId} disabled={!canEditEmployee} onChange={(event) => setEditForm((current) => ({ ...current, departmentId: event.target.value }))} className="mt-1 w-full rounded border border-[#D8D3C7] bg-white px-3 py-2 text-xs font-sans normal-case text-[#16233B] outline-none focus:border-[#8C5D17] disabled:bg-[#F3F1ED] disabled:text-[#728294]">
+                        <option value="">Unassigned</option>
+                        {departments.map((department) => <option key={department._id || department.id} value={department._id || department.id}>{department.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-[10px] font-mono font-bold uppercase text-[#728294]">
+                      Manager
+                      <select value={editForm.managerId} disabled={!canEditEmployee} onChange={(event) => setEditForm((current) => ({ ...current, managerId: event.target.value }))} className="mt-1 w-full rounded border border-[#D8D3C7] bg-white px-3 py-2 text-xs font-sans normal-case text-[#16233B] outline-none focus:border-[#8C5D17] disabled:bg-[#F3F1ED] disabled:text-[#728294]">
+                        <option value="">No manager</option>
+                        {employees.filter((employee) => employee._id !== selectedEmployee._id).map((employee) => <option key={employee._id} value={employee._id}>{employee.firstName} {employee.lastName}{employee.designation ? ` (${employee.designation})` : ''}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-[10px] font-mono font-bold uppercase text-[#728294]">
+                      Employment status
+                      <select value={editForm.employmentStatus} disabled={!canEditEmployee} onChange={(event) => setEditForm((current) => ({ ...current, employmentStatus: event.target.value }))} className="mt-1 w-full rounded border border-[#D8D3C7] bg-white px-3 py-2 text-xs font-sans normal-case text-[#16233B] outline-none focus:border-[#8C5D17] disabled:bg-[#F3F1ED] disabled:text-[#728294]">
+                        {['ACTIVE', 'PROBATION', 'ON_LEAVE', 'INACTIVE', 'TERMINATED'].map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <aside className="rounded-lg border border-[#E3DED4] bg-[#FAF8F5] p-4">
+                    <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#728294]">Org relationship</h3>
+                    <p className="mt-3 text-xs text-[#5B6B79]">Manager</p>
+                    <p className="font-bold text-[#16233B]">{selectedEmployee.managerId ? `${selectedEmployee.managerId.firstName || ''} ${selectedEmployee.managerId.lastName || ''}` : 'No manager assigned'}</p>
+                    <p className="mt-4 text-xs text-[#5B6B79]">Direct reports</p>
+                    <p className="font-mono text-2xl font-bold text-[#8C5D17]">{selectedEmployee.directReports.length}</p>
+                    <div className="mt-3 space-y-1 text-xs text-[#5B6B79]">{selectedEmployee.directReports.slice(0, 5).map((report) => <p key={report._id}>{report.firstName} {report.lastName}</p>)}</div>
+                  </aside>
+                </div>
+                <div className="flex justify-end gap-2 border-t border-[#E3DED4] pt-4">
+                  <button type="button" onClick={closeEmployee} className="rounded border border-[#D8D3C7] bg-white px-4 py-2 text-xs font-mono font-bold text-[#16233B]">CLOSE</button>
+                  {canEditEmployee && <button type="submit" disabled={savingEmployee} className="rounded bg-[#8C5D17] px-4 py-2 text-xs font-mono font-bold text-white disabled:opacity-50">{savingEmployee ? 'SAVING...' : 'SAVE PROFILE'}</button>}
                 </div>
               </form>
             )}

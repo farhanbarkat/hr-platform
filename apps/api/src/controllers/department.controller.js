@@ -103,7 +103,7 @@ export const updateDepartment = asyncHandler(async (req, res) => {
 
   if (description !== undefined) department.description = description;
   if (headEmployeeId !== undefined)
-    department.headEmployeeId = headEmployeeId || null;
+    department.headOfDepartment = headEmployeeId || null;
 
   await department.save();
 

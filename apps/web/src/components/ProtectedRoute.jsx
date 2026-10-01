@@ -1,7 +1,23 @@
 import React from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth, resolveHomeRoute } from '../context/AuthContext.jsx';
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
 import { tokenStorage } from '../lib/tokenStorage.js';
+
+export function AccessDenied({ permission }) {
+  return (
+    <div className="min-h-[320px] flex items-center justify-center bg-[#F7F6F2] p-6">
+      <div className="w-full max-w-lg rounded-lg border border-[#F5C2BA] bg-white p-6 text-center shadow-sm">
+        <h1 className="text-lg font-bold text-[#B3432E]">You do not have permission to view this page.</h1>
+        <p className="mt-2 text-xs text-[#5B6B79]">
+          Contact your administrator if you believe access should be assigned.
+        </p>
+        {permission && (
+          <p className="mt-3 font-mono text-[11px] text-[#728294]">Required permission: {permission}</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const ProtectedRoute = ({
   children,
@@ -11,7 +27,6 @@ export const ProtectedRoute = ({
   requiredPermissions,
   checkAccess,
 }) => {
-  const location = useLocation();
   const {
     user: contextUser,
     token: contextToken,
@@ -56,26 +71,20 @@ export const ProtectedRoute = ({
   if (typeof checkAccess === 'function') {
     const granted = checkAccess(user, hasAnyPermission, hasPermission);
     if (!granted) {
-      const home = resolveHomeRoute(user);
-      if (location.pathname === home) return children ? children : <Outlet />;
-      return <Navigate to={home} replace />;
+      return <AccessDenied />;
     }
     return children ? children : <Outlet />;
   }
 
   // 2. Granular Single Permission Verification
   if (requiredPermission && !hasPermission(requiredPermission)) {
-    const home = resolveHomeRoute(user);
-    if (location.pathname === home) return children ? children : <Outlet />;
-    return <Navigate to={home} replace />;
+    return <AccessDenied permission={requiredPermission} />;
   }
 
   // 3. Multiple Permissions Verification (At least one match)
   if (Array.isArray(requiredPermissions) && requiredPermissions.length > 0) {
     if (!hasAnyPermission(requiredPermissions)) {
-      const home = resolveHomeRoute(user);
-      if (location.pathname === home) return children ? children : <Outlet />;
-      return <Navigate to={home} replace />;
+      return <AccessDenied permission={requiredPermissions.join(' or ')} />;
     }
   }
 
@@ -89,9 +98,7 @@ export const ProtectedRoute = ({
   }
 
   if (targetRoles.length > 0 && !hasRole(targetRoles)) {
-    const home = resolveHomeRoute(user);
-    if (location.pathname === home) return children ? children : <Outlet />;
-    return <Navigate to={home} replace />;
+    return <AccessDenied />;
   }
 
   return children ? children : <Outlet />;
