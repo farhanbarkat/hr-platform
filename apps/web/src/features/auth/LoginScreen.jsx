@@ -18,6 +18,9 @@ export default function LoginScreen() {
   const [step, setStep] = useState('CREDENTIALS'); // 'CREDENTIALS' | 'OTP'
   const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
   const [challengeToken, setChallengeToken] = useState('');
+  const [isEnrolled, setIsEnrolled] = useState(true);
+  const [setupData, setSetupData] = useState(null);
+  const [setupLoading, setSetupLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -81,7 +84,29 @@ export default function LoginScreen() {
       // Multi-factor detection
       if (res?.requires2FA) {
         setChallengeToken(res.challengeToken || '');
+        setIsEnrolled(res.isEnrolled !== false);
         setStep('OTP');
+
+        if (res.isEnrolled === false) {
+          setSetupLoading(true);
+          try {
+            const setupResponse = await apiClient.post(
+              '/auth/2fa/setup',
+              {},
+              { headers: { Authorization: `Bearer ${res.challengeToken}` } }
+            );
+            const setupPayload = setupResponse.data?.data || setupResponse.data || {};
+            setSetupData(setupPayload);
+          } catch (setupError) {
+            setErrorMessage(
+              setupError.response?.data?.message ||
+              'Unable to initialize two-factor setup. Please try again.'
+            );
+          } finally {
+            setSetupLoading(false);
+          }
+        }
+
         setLoading(false);
         return;
       }
@@ -98,9 +123,9 @@ export default function LoginScreen() {
         setChallengeToken(possibleToken || '');
         setStep('OTP');
       } else {
-        setErrorMessage(
-          err.response?.data?.message || err.message || 'Invalid organization email or password credentials.'
-        );
+        setErrorMessage(err.response?.status === 401
+          ? 'Email or password is incorrect.'
+          : err.response?.data?.message || err.message || 'Unable to sign in. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -150,7 +175,7 @@ export default function LoginScreen() {
 
     try {
       // Calls AuthContext verify2FA so tokens & react state update synchronously
-      const res = await verify2FA(challengeToken, enteredOtp);
+      const res = await verify2FA(challengeToken, enteredOtp, isEnrolled);
       const targetDestination = returnTo || res?.homeRoute || resolveHomeRoute(res?.user || res);
       navigate(targetDestination, { replace: true });
     } catch (err) {
@@ -325,8 +350,23 @@ export default function LoginScreen() {
             <form onSubmit={handleVerifyOtp} className="space-y-6">
               <div>
                 <label className="block text-[11px] font-mono font-semibold uppercase text-[#5B6B79] mb-2 text-center">
-                  AUTHENTICATION CODE (2FA)
+                  {isEnrolled ? 'AUTHENTICATION CODE (2FA)' : 'CONFIRM AUTHENTICATOR SETUP'}
                 </label>
+                {!isEnrolled && (
+                  <div className="mb-4 space-y-3 rounded-md border border-[#EBD6A7] bg-[#FFFDF5] p-3 text-[11px] font-mono text-[#6E5420]">
+                    <p>{setupLoading ? 'Preparing your authenticator setup...' : 'Scan this QR code with your authenticator app, then enter the generated code below.'}</p>
+                    {setupData?.qrCodeUrl && (
+                      <img src={setupData.qrCodeUrl} alt="Two-factor authentication setup QR code" className="mx-auto h-40 w-40" />
+                    )}
+                    {setupData?.secret && <p className="break-all">Manual setup key: {setupData.secret}</p>}
+                    {Array.isArray(setupData?.recoveryCodes) && setupData.recoveryCodes.length > 0 && (
+                      <div>
+                        <p className="font-bold">Save these one-time recovery codes:</p>
+                        <p className="mt-1 break-words">{setupData.recoveryCodes.join('  ')}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div
                   onPaste={handleOtpPaste}
                   className="flex justify-between gap-2 max-w-[340px] mx-auto"
@@ -350,10 +390,10 @@ export default function LoginScreen() {
               <div className="space-y-2">
                 <button
                   type="submit"
-                  disabled={loading || otpCode.some((d) => !d)}
+                  disabled={loading || setupLoading || otpCode.some((d) => !d)}
                   className="w-full py-3 px-4 bg-[#B9812E] hover:bg-[#a57227] text-white text-xs font-mono font-semibold rounded-md shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <span>{loading ? 'Verifying Credentials...' : 'Verify & Access Workspace'}</span>
+                  <span>{loading ? 'Verifying Credentials...' : isEnrolled ? 'Verify & Access Workspace' : 'Enable 2FA & Access Workspace'}</span>
                   {!loading && <span>&rarr;</span>}
                 </button>
 

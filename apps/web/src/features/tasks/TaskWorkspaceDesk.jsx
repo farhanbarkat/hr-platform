@@ -121,10 +121,16 @@ export default function TaskWorkspaceDesk() {
   const handleStatusChange = async (taskId, nextStatus) => {
     if (!canUpdateTasks) return;
 
+    const previousTasks = tasks;
+    setTasks((current) => current.map((task) => (
+      task._id === taskId ? { ...task, status: nextStatus } : task
+    )));
+
     try {
       await apiClient.patch(`/tasks/${taskId}/status`, { status: nextStatus });
       fetchTasks();
     } catch (err) {
+      setTasks(previousTasks);
       setFeedback({
         text: err.response?.data?.message || 'Failed to update task status.',
         ok: false,
@@ -261,8 +267,14 @@ export default function TaskWorkspaceDesk() {
 
           return (
             <div
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const taskId = event.dataTransfer.getData('text/task-id');
+                  if (taskId) handleStatusChange(taskId, col.id);
+                }}
               key={col.id}
-              className="bg-[#FAF8F5]/60 border border-[#E3DED4] rounded-lg p-4 flex flex-col min-h-[500px]"
+                className="bg-[#FAF8F5]/60 border border-[#E3DED4] rounded-lg p-4 flex flex-col min-h-[500px] transition-colors"
             >
               <div className="flex justify-between items-center pb-2.5 mb-3 border-b border-[#E3DED4]">
                 <span className="text-xs font-mono font-bold text-[#16233B] uppercase">
@@ -285,7 +297,9 @@ export default function TaskWorkspaceDesk() {
                     return (
                       <div
                         key={task._id}
-                        className="bg-white border border-[#E3DED4] rounded-lg p-3.5 shadow-2xs hover:border-[#8C5D17]/60 transition-all space-y-2.5"
+                        draggable={canUpdateTasks}
+                        onDragStart={(event) => event.dataTransfer.setData('text/task-id', task._id)}
+                        className={`bg-white border-l-4 border-y border-r border-[#E3DED4] rounded-lg p-3.5 shadow-2xs hover:border-[#8C5D17]/60 transition-all space-y-2.5 ${canUpdateTasks ? 'cursor-grab' : 'cursor-default'} ${task.status === 'COMPLETED' ? 'border-l-[#1E7E34]' : task.status === 'IN_PROGRESS' ? 'border-l-[#8C5D17]' : 'border-l-[#728294]'}`}
                       >
                         <div className="flex justify-between items-start gap-2">
                           <span className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
@@ -296,8 +310,9 @@ export default function TaskWorkspaceDesk() {
                             {task.priority}
                           </span>
 
-                          <span className="text-[10px] font-mono text-[#728294]">
-                            Due: {new Date(task.deadline).toLocaleDateString()}
+                          <span className={`text-[10px] font-mono ${task.status !== 'COMPLETED' && task.deadline && new Date(task.deadline) < new Date() ? 'font-bold text-[#B83E28]' : 'text-[#728294]'}`}>
+                            {task.status !== 'COMPLETED' && task.deadline && new Date(task.deadline) < new Date() ? 'OVERDUE: ' : 'Due: '}
+                            {new Date(task.deadline).toLocaleDateString()}
                           </span>
                         </div>
 

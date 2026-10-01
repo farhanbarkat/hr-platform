@@ -61,7 +61,7 @@ apiClient.interceptors.response.use(
 
     if (
       originalRequest.url?.includes('/auth/login') ||
-      originalRequest.url?.includes('/auth/refresh-token') ||
+      originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/auth/2fa')
     ) {
       return Promise.reject(error);
@@ -83,13 +83,10 @@ apiClient.interceptors.response.use(
 
     try {
       const storedRefreshToken = tokenStorage.getRefreshToken();
-      if (!storedRefreshToken) {
-        throw new Error('No refresh token present in secure storage');
-      }
 
       const response = await axios.post(
-        `${BASE_URL}/auth/refresh-token`,
-        { refreshToken: storedRefreshToken },
+        `${BASE_URL}/auth/refresh`,
+        storedRefreshToken ? { refreshToken: storedRefreshToken } : {},
         { headers: { 'Content-Type': 'application/json' }, withCredentials: true }
       );
 

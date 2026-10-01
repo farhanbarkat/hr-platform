@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PERMISSIONS } from '../config/permissions.js';
@@ -132,15 +132,12 @@ const Icons = {
 };
 
 export default function AppSidebar() {
-  const { user, logout, hasPermission, isSuperAdmin } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
-
-  const isCompanyAdmin =
-    user?.role === 'COMPANY_ADMIN' || user?.role === 'ADMIN' || user?.isCompanyOwner;
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Robust permission resolver jo direct user permissions array/capabilities ko bhi check karega
   const checkAccess = (permissionString) => {
-    if (isSuperAdmin || isCompanyAdmin) return true;
     if (hasPermission && hasPermission(permissionString)) return true;
     
     // Fallback live check against user object arrays
@@ -151,14 +148,19 @@ export default function AppSidebar() {
     return false;
   };
 
+  const checkAnyAccess = (permissions) => permissions.some(checkAccess);
+
   const [resolvedCompanyName, setResolvedCompanyName] = useState(() => {
     return user?.companyName || user?.company?.name || 'Cloudlogic';
   });
 
   useEffect(() => {
-    if (user?.companyName || user?.company?.name) {
-      setResolvedCompanyName(user.companyName || user.company.name);
-    }
+    const timeout = setTimeout(() => {
+      if (user?.companyName || user?.company?.name) {
+        setResolvedCompanyName(user.companyName || user.company.name);
+      }
+    }, 0);
+    return () => clearTimeout(timeout);
   }, [user]);
 
   const operationsNav = [
@@ -166,7 +168,13 @@ export default function AppSidebar() {
       label: 'Executive Overview',
       path: '/company-admin/overview',
       Icon: Icons.Overview,
-      isAccessible: true,
+      isAccessible: checkAccess(PERMISSIONS.EMPLOYEE.READ),
+    },
+    {
+      label: 'My Dashboard',
+      path: '/employee/dashboard',
+      Icon: Icons.Overview,
+      isAccessible: checkAccess(PERMISSIONS.EMPLOYEE.VIEW_OWN),
     },
     {
       label: 'Workforce Directory',
@@ -190,7 +198,7 @@ export default function AppSidebar() {
       label: 'Shift Incharge Desk',
       path: '/shift-incharge/dashboard',
       Icon: Icons.Incharge,
-      isAccessible: checkAccess(PERMISSIONS.ATTENDANCE.VIEW_TEAM) || user?.role === 'HR' || user?.role === 'MANAGER',
+      isAccessible: checkAccess(PERMISSIONS.ATTENDANCE.VIEW_TEAM),
     },
     {
       label: 'Time & Attendance',
@@ -202,31 +210,31 @@ export default function AppSidebar() {
       label: 'Task & Workspace',
       path: '/company-admin/tasks',
       Icon: Icons.Tasks,
-      isAccessible: checkAccess('tasks.read') || true,
+      isAccessible: checkAnyAccess(['task.read', 'tasks.read']),
     },
     {
       label: 'Direct Chat Desk',
       path: '/company-admin/communication',
       Icon: Icons.Chat,
-      isAccessible: true,
+      isAccessible: checkAccess(PERMISSIONS.EMPLOYEE.READ),
     },
     {
       label: 'Company Calendar',
       path: '/company-admin/calendar',
       Icon: Icons.Calendar,
-      isAccessible: checkAccess(PERMISSIONS.CALENDAR.READ) || user?.role === 'HR' || user?.role === 'MANAGER',
+      isAccessible: checkAccess(PERMISSIONS.CALENDAR.READ),
     },
     {
       label: 'Exit & Offboarding',
       path: '/company-admin/offboarding',
       Icon: Icons.SignOut,
-      isAccessible: checkAccess(PERMISSIONS.EMPLOYEE.UPDATE) || user?.role === 'HR',
+      isAccessible: checkAccess(PERMISSIONS.EMPLOYEE.UPDATE),
     },
     {
       label: 'Helpdesk Triage',
       path: '/company-admin/helpdesk',
       Icon: Icons.Chat,
-      isAccessible: checkAccess('helpdesk.read') || user?.role === 'HR' || isCompanyAdmin,
+      isAccessible: checkAccess('helpdesk.read'),
     },
     {
       label: 'Leave Operations',
@@ -241,10 +249,25 @@ export default function AppSidebar() {
       isAccessible: checkAccess(PERMISSIONS.PAYROLL.READ),
     },
     {
+      label: 'Salary Structures',
+      path: '/company-admin/salary-structures',
+      Icon: Icons.Payroll,
+      isAccessible: checkAccess(PERMISSIONS.PAYROLL.READ),
+    },
+    {
+      label: 'Promotion Workflow',
+      path: '/company-admin/promotions',
+      Icon: Icons.Workforce,
+      isAccessible: checkAccess(PERMISSIONS.EMPLOYEE.READ),
+    },
+    {
       label: 'Loan & Advances',
       path: '/company-admin/loans',
       Icon: Icons.Loan,
-      isAccessible: checkAccess('loan.read') || true,
+      isAccessible: checkAnyAccess([
+        PERMISSIONS.FINANCE.VIEW_DASHBOARD,
+        PERMISSIONS.FINANCE.VIEW_OWN,
+      ]),
     },
   ];
 
@@ -271,7 +294,7 @@ export default function AppSidebar() {
       label: 'Income Tax & Presets',
       path: '/company-admin/tax',
       Icon: Icons.Tax,
-      isAccessible: checkAccess('tax.read') || true,
+      isAccessible: checkAccess(PERMISSIONS.PAYROLL.READ),
     },
     {
       label: 'Organization Settings',
@@ -288,10 +311,11 @@ export default function AppSidebar() {
     <NavLink
       key={path}
       to={path}
+      onClick={() => setMobileOpen(false)}
       className={({ isActive }) =>
         `flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-sans transition-colors rounded-[3px] ${
           isActive
-            ? 'bg-[#C98A2C] text-white font-medium shadow-xs'
+            ? 'bg-[#B9812E] text-white font-medium shadow-xs'
             : 'text-[#8C9BAE] hover:text-[#D4DEEB] hover:bg-[#141F32]'
         }`
       }
@@ -307,8 +331,8 @@ export default function AppSidebar() {
     </NavLink>
   );
 
-  return (
-    <aside className="w-[230px] shrink-0 bg-[#0B1320] min-h-screen text-[#8C9BAE] flex flex-col justify-between border-r border-[#162235] select-none font-sans">
+  const sidebarContent = (
+    <aside className="w-[230px] h-full shrink-0 bg-[#0B1320] text-[#8C9BAE] flex flex-col justify-between border-r border-[#162235] select-none font-sans">
       <div>
         <div className="p-3.5 pb-3 border-b border-[#162235]">
           <div className="flex items-center gap-2.5">
@@ -402,5 +426,39 @@ export default function AppSidebar() {
         </button>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      <div className="md:hidden flex items-center justify-between p-3 bg-[#0B1320] border-b border-[#162235]">
+        <span className="text-xs font-mono font-bold text-white uppercase truncate">
+          {resolvedCompanyName}
+        </span>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open navigation menu"
+          className="p-1.5 rounded text-[#8C9BAE] hover:text-white bg-[#16233B]"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="hidden md:block">{sidebarContent}</div>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation menu"
+            onClick={() => setMobileOpen(false)}
+            className="fixed inset-0 bg-black/60"
+          />
+          <div className="relative z-50 h-full">{sidebarContent}</div>
+        </div>
+      )}
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 
@@ -23,6 +23,7 @@ export default function FinanceOperationsDesk() {
   const [opExForm, setOpExForm] = useState({ title: '', category: 'MISCELLANEOUS', amount: '', notes: '' });
   const [incomeForm, setIncomeForm] = useState({ title: '', source: 'CLIENT_RETAINER', amount: '', notes: '' });
   const [claimForm, setClaimForm] = useState({ category: 'TRAVEL', amount: '', description: '' });
+  const [receiptFile, setReceiptFile] = useState(null);
 
   const [feedback, setFeedback] = useState({ text: '', ok: true });
 
@@ -66,9 +67,12 @@ export default function FinanceOperationsDesk() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'overview') fetchOverview();
-    if (activeTab === 'claims') fetchClaimsQueue();
-    if (activeTab === 'my-claims') fetchMyClaims();
+    const timeout = window.setTimeout(() => {
+      if (activeTab === 'overview') fetchOverview();
+      if (activeTab === 'claims') fetchClaimsQueue();
+      if (activeTab === 'my-claims') fetchMyClaims();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [activeTab, fetchOverview, fetchClaimsQueue, fetchMyClaims]);
 
   // Handle Claims Actions (Approve / Reject)
@@ -119,10 +123,37 @@ export default function FinanceOperationsDesk() {
   const handleSubmitClaim = async (e) => {
     e.preventDefault();
     try {
-      await apiClient.post('/expenses', claimForm);
+      let receiptDocumentId = null;
+      if (receiptFile) {
+        const employeeId = user?.employeeId || user?.employee?._id;
+        const uploadResponse = await apiClient.post('/documents/upload-url', {
+          employeeId,
+          fileName: receiptFile.name,
+          fileType: receiptFile.type || 'application/octet-stream',
+          documentType: 'RECEIPT',
+        });
+        const upload = uploadResponse.data?.data;
+        if (!upload?.uploadUrl || !upload?.s3Key) throw new Error('Receipt upload URL was not returned.');
+        await fetch(upload.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': receiptFile.type || 'application/octet-stream' },
+          body: receiptFile,
+        });
+        const confirmed = await apiClient.post('/documents', {
+          employeeId,
+          documentType: 'RECEIPT',
+          fileName: receiptFile.name,
+          mimeType: receiptFile.type || 'application/octet-stream',
+          s3Key: upload.s3Key,
+        });
+        receiptDocumentId = confirmed.data?.data?._id;
+      }
+
+      await apiClient.post('/expenses', { ...claimForm, receiptDocumentId });
       setFeedback({ text: 'Expense claim dispatched for manager approval.', ok: true });
       setIsNewClaimModalOpen(false);
       setClaimForm({ category: 'TRAVEL', amount: '', description: '' });
+      setReceiptFile(null);
       if (activeTab === 'my-claims') fetchMyClaims();
     } catch (err) {
       setFeedback({ text: err.response?.data?.message || 'Failed to submit claim.', ok: false });
@@ -318,7 +349,10 @@ export default function FinanceOperationsDesk() {
                   ) : (
                     claimsQueue.map((claim) => {
                       const emp = claim.employeeId || {};
-                      const isSelf = emp.userId?.toString() === user?._id?.toString();
+                      const isSelf =
+                        emp.userId?.toString() === user?._id?.toString() ||
+                        emp._id?.toString() === user?.employeeId?.toString() ||
+                        (emp.email && emp.email.toLowerCase() === user?.email?.toLowerCase());
 
                       return (
                         <tr key={claim._id} className="hover:bg-[#FAF8F5]/60 transition-colors">
@@ -606,9 +640,10 @@ export default function FinanceOperationsDesk() {
                   >
                     <option value="TRAVEL">Travel / Taxi</option>
                     <option value="MEALS">Client Meals</option>
-                    <option value="FUEL">Fuel / Transport</option>
-                    <option value="MEDICAL">Medical Allowance</option>
-                    <option value="OFFICE_SUPPLY">Stationery / Equipment</option>
+                    <option value="EQUIPMENT">Equipment</option>
+                    <option value="OFFICE_SUPPLIES">Office Supplies</option>
+                    <option value="TRAINING">Training</option>
+                    <option value="OTHER">Other</option>
                   </select>
                 </div>
                 <div>
@@ -633,6 +668,16 @@ export default function FinanceOperationsDesk() {
                   placeholder="Explain the expense business justification..."
                   className="w-full p-2 border border-[#D8D3C7] rounded outline-none focus:border-[#8C5D17]"
                 />
+              </div>
+              <div>
+                <label className="text-[10px] font-mono uppercase text-[#728294] block mb-1">Receipt (Optional)</label>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                  className="w-full rounded border border-[#D8D3C7] bg-white p-2 text-xs"
+                />
+                {receiptFile && <p className="mt-1 text-[10px] text-[#728294]">Selected: {receiptFile.name}</p>}
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button

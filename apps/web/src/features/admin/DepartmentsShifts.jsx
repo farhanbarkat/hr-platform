@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PERMISSIONS } from '../../config/permissions.js';
@@ -8,6 +8,8 @@ export default function DepartmentsShifts() {
 
   const [activeTab, setActiveTab] = useState('ROSTER'); // ROSTER | SHIFTS | DEPARTMENTS
   const [departments, setDepartments] = useState([]);
+  const [departmentFilter, setDepartmentFilter] = useState('ACTIVE');
+  const [editingDepartment, setEditingDepartment] = useState(null);
   const [shifts, setShifts] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -21,7 +23,7 @@ export default function DepartmentsShifts() {
   const [submitting, setSubmitting] = useState(false);
 
   // Forms
-  const [deptForm, setDeptForm] = useState({ name: '', code: '', description: '' });
+  const [deptForm, setDeptForm] = useState({ name: '', code: '', description: '', headOfDepartment: '' });
   const [shiftForm, setShiftForm] = useState({
     name: '',
     startTime: '09:00',
@@ -42,13 +44,15 @@ export default function DepartmentsShifts() {
     isSuperAdmin ||
     user?.role === 'COMPANY_ADMIN' ||
     user?.role === 'ADMIN' ||
-    hasPermission(PERMISSIONS.COMPANY.CONFIGURE);
+    hasPermission(PERMISSIONS.DEPARTMENT.CREATE) ||
+    hasPermission(PERMISSIONS.DEPARTMENT.UPDATE) ||
+    hasPermission(PERMISSIONS.DEPARTMENT.DELETE);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [deptRes, shiftRes, assignRes, empRes] = await Promise.allSettled([
-        apiClient.get('/departments'),
+        apiClient.get('/departments?includeInactive=true'),
         apiClient.get('/shifts/templates'),
         apiClient.get('/shifts/assignments'),
         apiClient.get('/employees?limit=200'),
@@ -89,10 +93,13 @@ export default function DepartmentsShifts() {
     try {
       setSubmitting(true);
       setFeedback(null);
-      await apiClient.post('/departments', deptForm);
+      await apiClient.post('/departments', {
+        ...deptForm,
+        headOfDepartment: deptForm.headOfDepartment || null,
+      });
       setFeedback({ text: 'Department successfully created.', ok: true });
       setIsDeptModalOpen(false);
-      setDeptForm({ name: '', code: '', description: '' });
+      setDeptForm({ name: '', code: '', description: '', headOfDepartment: '' });
       fetchData();
     } catch (err) {
       setFeedback({
@@ -103,6 +110,73 @@ export default function DepartmentsShifts() {
       setSubmitting(false);
     }
   };
+
+  const handleUpdateDepartment = async (e) => {
+    e.preventDefault();
+    if (!editingDepartment) return;
+
+    try {
+      setSubmitting(true);
+      setFeedback(null);
+      await apiClient.put(`/departments/${editingDepartment._id}`, {
+        name: deptForm.name.trim(),
+        headEmployeeId: deptForm.headOfDepartment || null,
+      });
+      setFeedback({ text: 'Department updated successfully.', ok: true });
+      setIsDeptModalOpen(false);
+      setEditingDepartment(null);
+      setDeptForm({ name: '', code: '', description: '', headOfDepartment: '' });
+      fetchData();
+    } catch (err) {
+      setFeedback({
+        text: err.response?.data?.message || 'Failed to update department.',
+        ok: false,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeactivateDepartment = async (department) => {
+    if (!window.confirm(`Deactivate ${department.name}? It will remain visible in the inactive list.`)) return;
+
+    try {
+      setSubmitting(true);
+      setFeedback(null);
+      await apiClient.patch(`/departments/${department._id}/deactivate`);
+      setFeedback({ text: `${department.name} was deactivated and kept for historical records.`, ok: true });
+      fetchData();
+    } catch (err) {
+      setFeedback({
+        text: err.response?.data?.message || 'Failed to deactivate department.',
+        ok: false,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openCreateDepartment = () => {
+    setEditingDepartment(null);
+    setDeptForm({ name: '', code: '', description: '', headOfDepartment: '' });
+    setIsDeptModalOpen(true);
+  };
+
+  const openEditDepartment = (department) => {
+    setEditingDepartment(department);
+    setDeptForm({
+      name: department.name || '',
+      code: department.code || '',
+      description: department.description || '',
+      headOfDepartment: department.headOfDepartment?._id || department.headOfDepartment || '',
+    });
+    setIsDeptModalOpen(true);
+  };
+
+  const visibleDepartments = departments.filter((department) => {
+    if (departmentFilter === 'ALL') return true;
+    return departmentFilter === 'ACTIVE' ? department.isActive !== false : department.isActive === false;
+  });
 
   const handleCreateShift = async (e) => {
     e.preventDefault();
@@ -205,7 +279,7 @@ export default function DepartmentsShifts() {
               + CONFIGURE SHIFT
             </button>
             <button
-              onClick={() => setIsDeptModalOpen(true)}
+              onClick={openCreateDepartment}
               className="px-3.5 py-1.5 bg-[#FAF8F5] hover:bg-[#FAF4E8] border border-[#D8D3C7] text-[#8C5D17] text-xs font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs"
             >
               + NEW DEPARTMENT
@@ -405,25 +479,85 @@ export default function DepartmentsShifts() {
       {/* Tab 3: Departments */}
       {activeTab === 'DEPARTMENTS' && (
         <div className="bg-white border border-[#E3DED4] rounded-lg overflow-hidden shadow-2xs">
+          <div className="flex flex-col gap-3 border-b border-[#E3DED4] bg-[#FAF8F5] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-[#16233B]">Department Directory</h2>
+              <p className="text-[11px] text-[#728294]">Inactive departments remain available for historical references.</p>
+            </div>
+            <div className="flex items-center gap-1 rounded border border-[#D8D3C7] bg-white p-1">
+              {[
+                ['ACTIVE', 'Active'],
+                ['INACTIVE', 'Inactive'],
+                ['ALL', 'All'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDepartmentFilter(value)}
+                  className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wide ${
+                    departmentFilter === value ? 'bg-[#16233B] text-white' : 'text-[#728294] hover:bg-[#FAF8F5]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[#E3DED4] bg-[#FAF8F5] text-[10px] font-mono uppercase tracking-wider text-[#728294]">
                 <th className="py-3 px-4">Department Name</th>
                 <th className="py-3 px-4">Unit Code</th>
-                <th className="py-3 px-4">Description</th>
+                <th className="py-3 px-4">Head of Department</th>
                 <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFECE6] text-xs">
-              {departments.map((dept) => (
+              {visibleDepartments.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center font-mono text-xs text-[#728294]">
+                    No {departmentFilter.toLowerCase()} departments found.
+                  </td>
+                </tr>
+              ) : visibleDepartments.map((dept) => (
                 <tr key={dept._id} className="hover:bg-[#FAF8F5]/60 transition-colors">
                   <td className="py-3.5 px-4 font-bold text-[#16233B]">{dept.name}</td>
                   <td className="py-3.5 px-4 font-mono font-semibold text-[#8C5D17]">{dept.code || 'DEPT'}</td>
-                  <td className="py-3.5 px-4 text-[#5B6B79] max-w-sm truncate">{dept.description || 'Corporate operations unit.'}</td>
+                  <td className="py-3.5 px-4 text-[#5B6B79]">
+                    {dept.headOfDepartment
+                      ? `${dept.headOfDepartment.firstName || ''} ${dept.headOfDepartment.lastName || ''}`.trim()
+                      : 'Not assigned'}
+                  </td>
                   <td className="py-3.5 px-4">
-                    <span className="inline-block px-2 py-0.5 text-[9px] font-mono rounded font-bold bg-[#EBF7F0] text-[#1E7E34] border border-[#C6EAD3]">
-                      ACTIVE
+                    <span className={`inline-block px-2 py-0.5 text-[9px] font-mono rounded font-bold border ${
+                      dept.isActive === false
+                        ? 'bg-[#FDEEEB] text-[#B83E28] border-[#F5C2BA]'
+                        : 'bg-[#EBF7F0] text-[#1E7E34] border-[#C6EAD3]'
+                    }`}>
+                      {dept.isActive === false ? 'INACTIVE' : 'ACTIVE'}
                     </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditDepartment(dept)}
+                        className="text-[10px] font-mono font-bold text-[#8C5D17] hover:underline"
+                      >
+                        EDIT
+                      </button>
+                      {dept.isActive !== false && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivateDepartment(dept)}
+                          disabled={submitting}
+                          className="text-[10px] font-mono font-bold text-[#B83E28] hover:underline disabled:opacity-50"
+                        >
+                          DEACTIVATE
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -668,7 +802,9 @@ export default function DepartmentsShifts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white border border-[#E3DED4] rounded-lg shadow-xl w-full max-w-md overflow-hidden">
             <div className="px-5 py-4 border-b border-[#E3DED4] flex justify-between items-center bg-[#FAF8F5]">
-              <h2 className="text-sm font-bold text-[#16233B]">Provision Department</h2>
+              <h2 className="text-sm font-bold text-[#16233B]">
+                {editingDepartment ? 'Edit Department' : 'Provision Department'}
+              </h2>
               <button
                 onClick={() => setIsDeptModalOpen(false)}
                 className="text-[#728294] hover:text-[#16233B] text-lg font-mono leading-none cursor-pointer"
@@ -676,7 +812,7 @@ export default function DepartmentsShifts() {
                 &times;
               </button>
             </div>
-            <form onSubmit={handleCreateDepartment} className="p-5 space-y-4 text-xs">
+            <form onSubmit={editingDepartment ? handleUpdateDepartment : handleCreateDepartment} className="p-5 space-y-4 text-xs">
               <div>
                 <label className="block text-[10px] font-mono uppercase text-[#728294] font-semibold mb-1">
                   Department Name *
@@ -702,7 +838,26 @@ export default function DepartmentsShifts() {
                   onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value.toUpperCase() })}
                   placeholder="e.g. QA"
                   className="w-full px-3 py-2 border border-[#D8D3C7] rounded focus:outline-none focus:border-[#8C5D17] bg-[#FAF8F5]/30 font-mono"
+                  disabled={Boolean(editingDepartment)}
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-[#728294] font-semibold mb-1">
+                  Head of Department (Optional)
+                </label>
+                <select
+                  value={deptForm.headOfDepartment}
+                  onChange={(e) => setDeptForm({ ...deptForm, headOfDepartment: e.target.value })}
+                  className="w-full px-3 py-2 border border-[#D8D3C7] rounded focus:outline-none focus:border-[#8C5D17] bg-[#FAF8F5]/30 font-sans text-xs"
+                >
+                  <option value="">No head assigned</option>
+                  {employees.map((employee) => (
+                    <option key={employee._id} value={employee._id}>
+                      {employee.firstName} {employee.lastName} ({employee.designation || 'Employee'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -731,7 +886,7 @@ export default function DepartmentsShifts() {
                   disabled={submitting}
                   className="px-5 py-2 bg-[#8C5D17] hover:bg-[#734B12] text-white text-xs font-mono font-bold rounded cursor-pointer disabled:opacity-50"
                 >
-                  {submitting ? 'SAVING...' : 'CREATE DEPARTMENT'}
+                  {submitting ? 'SAVING...' : editingDepartment ? 'SAVE DEPARTMENT' : 'CREATE DEPARTMENT'}
                 </button>
               </div>
             </form>

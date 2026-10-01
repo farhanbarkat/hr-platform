@@ -57,6 +57,11 @@ const promotionRecordSchema = new Schema(
       grossSalary: { type: Number, required: true },
       netSalary: { type: Number, required: true },
       currency: { type: String, default: 'PKR' },
+      salaryTypeId: {
+        type: Schema.Types.ObjectId,
+        ref: 'SalaryType',
+        default: null,
+      },
     },
     newSalaryStructureId: {
       type: Schema.Types.ObjectId,

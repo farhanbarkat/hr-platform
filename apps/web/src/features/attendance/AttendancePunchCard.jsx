@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 
@@ -38,7 +38,8 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
         { enableHighAccuracy: true, timeout: 10000 }
       );
     } else {
-      setGeoError('Geolocation is not supported by your browser.');
+      const timeout = setTimeout(() => setGeoError('Geolocation is not supported by your browser.'), 0);
+      return () => clearTimeout(timeout);
     }
   }, []);
 
@@ -47,7 +48,8 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
       const res = await apiClient.get(`/attendance?date=${todayStr}`);
-      const records = res.data?.data || [];
+      const payload = res.data?.data || res.data || [];
+      const records = Array.isArray(payload) ? payload : payload.records || [];
       if (records.length > 0) {
         setTodayRecord(records[0]);
         return records[0];
@@ -61,7 +63,8 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
   }, []);
 
   useEffect(() => {
-    fetchTodayStatus();
+    const timeout = setTimeout(() => fetchTodayStatus(), 0);
+    return () => clearTimeout(timeout);
   }, [fetchTodayStatus]);
 
  // Check-in Handler
@@ -87,7 +90,7 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
         if (existingRecord?.checkInTime && !existingRecord?.checkOutTime) {
           setFeedback({
             type: 'error',
-            text: 'You are already checked in. You can check out now.',
+            text: `Existing attendance found: checked in at ${new Date(existingRecord.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. You can check out now.`,
           });
           return;
         }
@@ -131,6 +134,16 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
 
   const isCheckedIn = Boolean(todayRecord?.checkInTime);
   const isCheckedOut = Boolean(todayRecord?.checkOutTime);
+  const statusLabel = !isCheckedIn
+    ? 'NOT CHECKED IN YET'
+    : isCheckedOut
+      ? 'CHECKED OUT'
+      : 'CHECKED IN';
+  const statusClass = !isCheckedIn
+    ? 'bg-[#FAF4E8] border-[#E8D4B5] text-[#8C5D17]'
+    : isCheckedOut
+      ? 'bg-[#EBF7F0] border-[#C6EAD3] text-[#1E7E34]'
+      : 'bg-[#EBF7F0] border-[#C6EAD3] text-[#1E7E34]';
 
   return (
     <div className="bg-white border border-[#E3DED4] rounded-lg p-5 shadow-xs font-mono text-xs select-none">
@@ -173,6 +186,11 @@ export default function AttendancePunchCard({ onRecordUpdated }) {
             day: 'numeric',
           })}
         </div>
+      </div>
+
+      <div className={`mb-4 rounded border px-3 py-2 text-center text-[11px] font-bold tracking-wider ${statusClass}`}>
+        {statusLabel}
+        {isCheckedIn && <span className="ml-2 font-normal normal-case">{isCheckedOut ? `at ${new Date(todayRecord.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `since ${new Date(todayRecord.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>}
       </div>
 
       {/* Record Metrics if checked in */}

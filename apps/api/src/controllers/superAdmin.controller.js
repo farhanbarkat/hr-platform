@@ -42,7 +42,7 @@ export const createCompany = asyncHandler(async (req, res) => {
     name,
     slug: slug.toLowerCase(),
     currency,
-    timezone,
+    defaultTimezone: timezone,
     isActive: true,
   });
 
@@ -96,7 +96,7 @@ export const listCompanies = asyncHandler(async (req, res) => {
         name: 1,
         slug: 1,
         currency: 1,
-        timezone: 1,
+        defaultTimezone: 1,
         isActive: 1,
         createdAt: 1,
         employeeCount: { $size: '$employees' },

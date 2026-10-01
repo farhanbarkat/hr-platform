@@ -16,7 +16,9 @@ const seed = async () => {
   await mongoose.connect(mongoUri);
   console.log('📦 Connected to MongoDB for TICKET-005D Seeding...');
 
-  const hashedPassword = await bcrypt.hash('SuperPassword123!', 10);
+  const superAdminPassword = process.env.SUPERADMIN_PASSWORD;
+  if (!superAdminPassword) throw new Error('SUPERADMIN_PASSWORD missing');
+  const hashedPassword = await bcrypt.hash(superAdminPassword, 10);
 
   // 1. Ensure Super-Admin User
   let superAdmin = await User.findOneAndUpdate(
@@ -135,7 +137,7 @@ const seed = async () => {
   console.log('\n========================================================');
   console.log('✅ TICKET-005D SEED DATA INITIALIZED!');
   console.log('========================================================');
-  console.log(`👤 Super Admin  : superadmin@hrplatform.com (PW: SuperPassword123!)`);
+  console.log('👤 Super Admin  : superadmin@hrplatform.com (password supplied through SUPERADMIN_PASSWORD)');
   console.log(`📋 Starter Plan : ${starterPlan._id} (${starterPlan.name})`);
   console.log(`📋 Enterprise   : ${enterprisePlan._id} (${enterprisePlan.name})`);
   console.log('========================================================\n');

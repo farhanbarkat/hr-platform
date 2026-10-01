@@ -1,7 +1,9 @@
-import React from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { TopBar } from '@repo/ui';
 import { useAuth, resolveHomeRoute } from './context/AuthContext.jsx';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
+import ImpersonationBanner from './components/ImpersonationBanner.jsx';
+import NotificationCenter from './components/NotificationCenter.jsx';
 import { PERMISSIONS } from './config/permissions.js';
 
 import LoginScreen from './features/auth/LoginScreen.jsx';
@@ -25,13 +27,15 @@ import DepartmentsShifts from './features/admin/DepartmentsShifts.jsx';
 import LeaveOperations from './features/admin/LeaveOperations.jsx';
 import AttendanceTracking from './features/admin/TimeAttendance.jsx';
 import PayrollCompensation from './features/admin/PayrollCompensation.jsx';
+import SalaryConfigurationDesk from './features/admin/SalaryConfigurationDesk.jsx';
+import PromotionWorkflowDesk from './features/admin/PromotionWorkflowDesk.jsx';
 import CompanyFinance from './features/admin/CompanyFinance.jsx';
 import OrganizationSettings from './features/admin/OrganizationSettings.jsx';
 import RoleCapabilityManager from './features/admin/RoleCapabilityManager.jsx';
 import EmployeeDashboard from './features/ess/EmployeeDashboard.jsx';
 import ShiftInchargeDashboard from './features/shifts/ShiftInchargeDashboard.jsx';
 import DirectChatDesk from './features/communication/DirectChatDesk.jsx';
-import CalendarDashboard from './features/calendar/CalendarDashboard.jsx';
+import CalendarDashboard from './features/calendar/CalendarDashboardV2.jsx';
 import OffboardingManagementDesk from './features/offboarding/OffboardingManagementDesk.jsx';
 import CompanyHelpdeskDesk from './features/helpdesk/CompanyHelpdeskDesk.jsx'; // ✅ Company Helpdesk imported
 import { FinanceOperationsDesk } from './features/financeDashboard/index.js';
@@ -69,11 +73,38 @@ function PublicOnlyRoute({ children }) {
 // Company Admin Shell Layout
 function CompanyAdminShell() {
   return (
-    <div className="flex min-h-screen bg-[#F7F6F2]">
+    <div className="flex min-h-screen flex-col bg-[#F7F6F2] md:flex-row">
       <AppSidebar />
-      <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-        <Outlet />
-      </main>
+      <div className="flex-1 flex flex-col min-w-0">
+        <ImpersonationBanner />
+        <TopBar
+          searchPlaceholder="Search workspace records..."
+          showNotifications={false}
+          actions={<NotificationCenter />}
+        />
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeShell() {
+  return (
+    <div className="flex min-h-screen flex-col bg-[#F7F6F2] md:flex-row">
+      <AppSidebar />
+      <div className="flex-1 flex flex-col min-w-0">
+        <ImpersonationBanner />
+        <TopBar
+          searchPlaceholder="Search workspace records..."
+          showNotifications={false}
+          actions={<NotificationCenter />}
+        />
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <EmployeeDashboard />
+        </main>
+      </div>
     </div>
   );
 }
@@ -113,7 +144,7 @@ export default function App() {
         path="/employee/dashboard"
         element={
           <ProtectedRoute>
-            <EmployeeDashboard />
+            <EmployeeShell />
           </ProtectedRoute>
         }
       />
@@ -174,6 +205,7 @@ export default function App() {
                 'company.configure',
                 'finance.view_dashboard',
                 'settings.read',
+                'task.read',
                 'tasks.read',
                 'tasks.create',
                 'tasks.update_status',
@@ -236,7 +268,7 @@ export default function App() {
         <Route
           path="departments"
           element={
-            <ProtectedRoute requiredPermission={PERMISSIONS.COMPANY.READ}>
+            <ProtectedRoute requiredPermission={PERMISSIONS.DEPARTMENT.READ}>
               <DepartmentsShifts />
             </ProtectedRoute>
           }
@@ -337,6 +369,24 @@ export default function App() {
           }
         />
 
+        <Route
+          path="salary-structures"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.PAYROLL.READ}>
+              <SalaryConfigurationDesk />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="promotions"
+          element={
+            <ProtectedRoute requiredPermission={PERMISSIONS.EMPLOYEE.READ}>
+              <PromotionWorkflowDesk />
+            </ProtectedRoute>
+          }
+        />
+
         {/* 1. Executive Macro Financial Overview */}
         <Route
           path="finance-overview"
@@ -391,11 +441,8 @@ export default function App() {
           path="settings"
           element={
             <ProtectedRoute
-              requiredPermissions={[
-                PERMISSIONS.SETTINGS.READ,
-                PERMISSIONS.COMPANY.CONFIGURE,
-                PERMISSIONS.SETTINGS.UPDATE,
-              ]}
+              allowedRoles={['COMPANY_ADMIN', 'ADMIN']}
+              requiredPermission={PERMISSIONS.COMPANY.UPDATE}
             >
               <OrganizationSettings />
             </ProtectedRoute>

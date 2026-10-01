@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import WorksiteMapPicker from './WorksiteMapPicker.jsx';
 
@@ -24,7 +24,7 @@ export default function OrganizationSettings() {
   // TAB 2: TAX SLABS STATE
   // -------------------------------------------------------------
   const [slabs, setSlabs] = useState([]);
-  const [countryCode, setCountryCode] = useState('PK');
+  const [countryCode] = useState('PK');
   const [taxYear, setTaxYear] = useState('2024-2025');
   const [sampleSalary, setSampleSalary] = useState(250000);
   const [simulationResult, setSimulationResult] = useState(null);
@@ -34,12 +34,17 @@ export default function OrganizationSettings() {
   // TAB 3: OPERATING PARAMETERS
   // -------------------------------------------------------------
   const [operatingParams, setOperatingParams] = useState({
-    standardWorkingHours: 8.0,
+    workingHoursStart: '09:00',
+    workingHoursEnd: '18:00',
     gracePeriodMinutes: 15,
-    currency: 'PKR (Pakistani Rupee)',
-    timezone: 'Asia/Karachi (GMT+5)',
+    annualQuota: 14,
+    casualQuota: 10,
+    sickQuota: 8,
+    currency: 'PKR',
+    timezone: 'Asia/Karachi',
     allowUnpaidNegativeBalance: true,
   });
+  const [originalTimezone, setOriginalTimezone] = useState('Asia/Karachi');
 
   // -------------------------------------------------------------
   // TAB 4: ANNOUNCEMENTS
@@ -126,16 +131,28 @@ export default function OrganizationSettings() {
   // 3. Load Operating Parameters
   const loadOperatingParams = useCallback(async () => {
     try {
-      const res = await apiClient.get('/finance/settings/thresholds').catch(() => null);
-      if (res?.data?.data) {
-        const set = res.data.data;
-        setOperatingParams((prev) => ({
-          ...prev,
-          currency: set.currency ? `${set.currency} (Pakistani Rupee)` : prev.currency,
-        }));
-      }
+      const res = await apiClient.get('/companies/me');
+      const company = res.data?.data || res.data || {};
+      const settings = company.settings || {};
+      const attendance = settings.attendance || {};
+      const workingHours = settings.workingHours || {};
+      const leaveDefaults = settings.leavePolicyDefaults || {};
+      const timezone = company.defaultTimezone || 'Asia/Karachi';
+
+      setOperatingParams((prev) => ({
+        ...prev,
+        workingHoursStart: workingHours.start || attendance.shiftStart || prev.workingHoursStart,
+        workingHoursEnd: workingHours.end || attendance.shiftEnd || prev.workingHoursEnd,
+        gracePeriodMinutes: settings.gracePeriodMinutes ?? attendance.gracePeriodMinutes ?? prev.gracePeriodMinutes,
+        annualQuota: leaveDefaults.annualQuota ?? prev.annualQuota,
+        casualQuota: leaveDefaults.casualQuota ?? prev.casualQuota,
+        sickQuota: leaveDefaults.sickQuota ?? prev.sickQuota,
+        currency: company.currency || prev.currency,
+        timezone,
+      }));
+      setOriginalTimezone(timezone);
     } catch (err) {
-      console.error('Failed to load operating parameters:', err);
+      setActionError(err.response?.data?.message || 'Failed to load company settings.');
     }
   }, []);
 
@@ -372,9 +389,34 @@ export default function OrganizationSettings() {
       setActionLoading(true);
       setActionStatus('');
       setActionError('');
-      await apiClient.put('/finance/settings/thresholds', {
-        currency: 'PKR',
+      const [startHour, startMinute] = operatingParams.workingHoursStart.split(':').map(Number);
+      const [endHour, endMinute] = operatingParams.workingHoursEnd.split(':').map(Number);
+      let standardShiftMinutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+      if (standardShiftMinutes <= 0) standardShiftMinutes += 24 * 60;
+
+      await apiClient.put('/companies/settings', {
+        currency: operatingParams.currency,
+        defaultTimezone: operatingParams.timezone,
+        settings: {
+          workingHours: {
+            start: operatingParams.workingHoursStart,
+            end: operatingParams.workingHoursEnd,
+          },
+          gracePeriodMinutes: Number(operatingParams.gracePeriodMinutes),
+          attendance: {
+            shiftStart: operatingParams.workingHoursStart,
+            shiftEnd: operatingParams.workingHoursEnd,
+            gracePeriodMinutes: Number(operatingParams.gracePeriodMinutes),
+            standardShiftMinutes,
+          },
+          leavePolicyDefaults: {
+            annualQuota: Number(operatingParams.annualQuota),
+            casualQuota: Number(operatingParams.casualQuota),
+            sickQuota: Number(operatingParams.sickQuota),
+          },
+        },
       });
+      setOriginalTimezone(operatingParams.timezone);
       setActionStatus('Operating parameters and attendance thresholds successfully updated.');
     } catch (err) {
       setActionError(err.response?.data?.message || 'Failed to update operating parameters.');
@@ -428,7 +470,7 @@ export default function OrganizationSettings() {
         body: announcementForm.body.trim(),
         targetAudience: announcementForm.targetAudience,
         targetDepartmentId: announcementForm.targetAudience === 'department' ? announcementForm.targetDepartmentId : undefined,
-        priority: 'high',
+        priority: 'urgent',
       });
 
       setAnnouncementForm({
@@ -451,7 +493,7 @@ export default function OrganizationSettings() {
       setActionLoading(true);
       await apiClient.patch(`/announcements/${id}/archive`);
       loadAnnouncements();
-    } catch (err) {
+    } catch {
       try {
         await apiClient.delete(`/announcements/${id}`);
         loadAnnouncements();
@@ -1300,17 +1342,27 @@ export default function OrganizationSettings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
-                STANDARD DAILY WORKING HOURS
+                STANDARD WORKING HOURS
               </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  step="0.5"
-                  value={operatingParams.standardWorkingHours}
-                  onChange={(e) => setOperatingParams({ ...operatingParams, standardWorkingHours: Number(e.target.value) })}
-                  className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
-                />
-                <span className="text-xs font-mono text-[#728294] whitespace-nowrap">Hours / Day</span>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[10px] text-[#728294]">
+                  Start
+                  <input
+                    type="time"
+                    value={operatingParams.workingHoursStart}
+                    onChange={(e) => setOperatingParams({ ...operatingParams, workingHoursStart: e.target.value })}
+                    className="mt-1 w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+                  />
+                </label>
+                <label className="text-[10px] text-[#728294]">
+                  End
+                  <input
+                    type="time"
+                    value={operatingParams.workingHoursEnd}
+                    onChange={(e) => setOperatingParams({ ...operatingParams, workingHoursEnd: e.target.value })}
+                    className="mt-1 w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+                  />
+                </label>
               </div>
             </div>
 
@@ -1332,33 +1384,65 @@ export default function OrganizationSettings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
-                DEFAULT COMPANY CURRENCY
-              </label>
-              <div className="p-2.5 bg-[#FAF8F5] border border-[#E3DED4] rounded flex items-center justify-between text-xs font-mono">
-                <div className="flex items-center gap-2 text-[#111C2E] font-bold">
-                  <span>💵</span>
-                  <span>{operatingParams.currency}</span>
-                </div>
-                <span className="text-[9.5px] bg-white border border-[#D5CEC2] px-2 py-0.5 rounded text-[#728294]">
-                  Locked Core Preset
-                </span>
-              </div>
+              <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">DEFAULT COMPANY CURRENCY</label>
+              <select
+                value={operatingParams.currency}
+                onChange={(e) => setOperatingParams({ ...operatingParams, currency: e.target.value })}
+                className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+              >
+                <option value="PKR">PKR - Pakistani Rupee</option>
+                <option value="USD">USD - US Dollar</option>
+                <option value="AED">AED - UAE Dirham</option>
+                <option value="SAR">SAR - Saudi Riyal</option>
+                <option value="GBP">GBP - Pound Sterling</option>
+              </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">
-                DEFAULT COMPANY TIMEZONE
-              </label>
-              <div className="p-2.5 bg-[#FAF8F5] border border-[#E3DED4] rounded flex items-center justify-between text-xs font-mono">
-                <div className="flex items-center gap-2 text-[#111C2E] font-bold">
-                  <span>🌍</span>
-                  <span>{operatingParams.timezone}</span>
-                </div>
-                <span className="text-[9.5px] bg-white border border-[#D5CEC2] px-2 py-0.5 rounded text-[#728294]">
-                  System Standard
-                </span>
-              </div>
+              <label className="text-[10px] font-mono uppercase text-[#728294] font-bold block">DEFAULT COMPANY TIMEZONE</label>
+              <select
+                value={operatingParams.timezone}
+                onChange={(e) => setOperatingParams({ ...operatingParams, timezone: e.target.value })}
+                className="w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+              >
+                <option value="Asia/Karachi">Asia/Karachi (UTC+05:00)</option>
+                <option value="Asia/Dubai">Asia/Dubai (UTC+04:00)</option>
+                <option value="Asia/Riyadh">Asia/Riyadh (UTC+03:00)</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="America/New_York">America/New_York</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </div>
+          </div>
+
+          {operatingParams.timezone !== originalTimezone && (
+            <div className="border border-[#E8D4B5] bg-[#FFF8E8] text-[#8C5D17] rounded p-3 text-xs">
+              <strong>Timezone change warning:</strong> This affects attendance dates and calculations going forward. Existing attendance records will not be recalculated.
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-xs font-bold text-[#111C2E]">Leave policy defaults</h3>
+              <p className="text-[11px] text-[#69788A]">These defaults apply when new employee leave balances are created.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                ['annualQuota', 'Annual leave days'],
+                ['casualQuota', 'Casual leave days'],
+                ['sickQuota', 'Sick leave days'],
+              ].map(([field, label]) => (
+                <label key={field} className="text-[10px] font-mono uppercase text-[#728294] font-bold">
+                  {label}
+                  <input
+                    type="number"
+                    min="0"
+                    value={operatingParams[field]}
+                    onChange={(e) => setOperatingParams({ ...operatingParams, [field]: Number(e.target.value) })}
+                    className="mt-1 w-full bg-[#FAF8F5] border border-[#D5CEC2] rounded px-3 py-2 text-xs font-mono text-[#111C2E] outline-none focus:border-[#8C5D17]"
+                  />
+                </label>
+              ))}
             </div>
           </div>
 

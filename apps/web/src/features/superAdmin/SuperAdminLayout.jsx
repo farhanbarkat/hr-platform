@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar, TopBar } from '@repo/ui';
 import { useAuth } from '../../context/AuthContext.jsx';
+import ImpersonationBanner from '../../components/ImpersonationBanner.jsx';
+import NotificationCenter from '../../components/NotificationCenter.jsx';
 
 const NavIcons = {
   Telemetry: () => (
@@ -46,9 +47,6 @@ export default function SuperAdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const [impersonationReason, setImpersonationReason] = useState(() =>
-    sessionStorage.getItem('impersonation_active')
-  );
 
   // Routes mapped strictly to /super-admin to prevent redirect loops
   const navItems = [
@@ -115,7 +113,7 @@ export default function SuperAdminLayout() {
       : 'SA';
 
   return (
-    <div className="flex h-screen bg-[#F6F5F1] overflow-hidden">
+    <div className="flex h-screen flex-col bg-[#F6F5F1] overflow-hidden md:flex-row">
       <Sidebar
         productName="PLATFORM CORE"
         subtitle="SUPER ADMIN"
@@ -130,24 +128,13 @@ export default function SuperAdminLayout() {
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Security Impersonation Banner */}
-        {impersonationReason && (
-          <div className="bg-[#B9812E] text-[#0E1826] px-4 py-2 flex items-center justify-between text-xs font-mono font-semibold">
-            <span>⚠️ ACTIVE IMPERSONATION SESSION — Reason: {impersonationReason}</span>
-            <button
-              onClick={() => {
-                sessionStorage.removeItem('impersonation_active');
-                setImpersonationReason(null);
-                window.location.reload();
-              }}
-              className="bg-[#0E1826] text-white px-2 py-0.5 rounded text-[11px] hover:bg-[#16233B]"
-            >
-              Exit Impersonation
-            </button>
-          </div>
-        )}
+        <ImpersonationBanner />
 
-        <TopBar searchPlaceholder="Search platform entities, tenants, logs..." />
+        <TopBar
+          searchPlaceholder="Search platform entities, tenants, logs..."
+          showNotifications={false}
+          actions={<NotificationCenter />}
+        />
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
           <Outlet />

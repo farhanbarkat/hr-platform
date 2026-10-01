@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 import { PERMISSIONS } from '../../config/permissions.js';
 import { useAuth } from '../../context/AuthContext.jsx'; // ✅ Imported useAuth to access refreshUser
@@ -80,6 +80,42 @@ const PERMISSION_CATALOG = [
   },
 ];
 
+const MODULE_LABELS = {
+  PAYROLL: 'Payroll',
+  LEAVE: 'Leave',
+  EMPLOYEE: 'Employees',
+  COMPANY: 'Settings',
+  ATTENDANCE: 'Attendance',
+  TASK: 'Tasks',
+  FINANCE: 'Finance',
+  DOCUMENT: 'Documents',
+  SETTINGS: 'Settings',
+  CALENDAR: 'Calendar',
+  DEPARTMENT: 'Departments',
+  TEAM: 'Teams',
+  TASKS: 'Tasks',
+};
+
+const formatPermissionLabel = (permission) => permission
+  .split('.')
+  .slice(1)
+  .join(' ')
+  .replace(/_/g, ' ')
+  .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const normalizePermissionGroups = (modules) => {
+  if (!modules || Array.isArray(modules)) return PERMISSION_CATALOG;
+
+  return Object.entries(modules).map(([moduleKey, permissions]) => ({
+    key: moduleKey,
+    category: MODULE_LABELS[moduleKey] || moduleKey.replace(/_/g, ' '),
+    permissions: Object.values(permissions || {}).map((permission) => ({
+      key: permission,
+      label: formatPermissionLabel(permission),
+    })),
+  })).filter((group) => group.permissions.length > 0);
+};
+
 export default function RoleCapabilityManager() {
   const { user: currentUser, refreshUser } = useAuth(); // ✅ Extract refreshUser
 
@@ -89,6 +125,8 @@ export default function RoleCapabilityManager() {
   // Common State
   const [employees, setEmployees] = useState([]);
   const [customRoles, setCustomRoles] = useState([]);
+  const [permissionGroups, setPermissionGroups] = useState(PERMISSION_CATALOG);
+  const [defaultTemplates, setDefaultTemplates] = useState({});
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,10 +154,11 @@ export default function RoleCapabilityManager() {
   const loadData = async (preserveSelectedId = null) => {
     try {
       setLoading(true);
-      const [empRes, overridesRes, customRolesRes] = await Promise.allSettled([
+      const [empRes, overridesRes, customRolesRes, catalogRes] = await Promise.allSettled([
         apiClient.get('/employees?limit=200'),
         apiClient.get('/role-overrides'),
         apiClient.get('/custom-roles'),
+        apiClient.get('/custom-roles/permissions-catalog'),
       ]);
 
       let empList = [];
@@ -137,6 +176,12 @@ export default function RoleCapabilityManager() {
       if (customRolesRes.status === 'fulfilled') {
         const roles = customRolesRes.value.data?.data || customRolesRes.value.data || [];
         setCustomRoles(Array.isArray(roles) ? roles : []);
+      }
+
+      if (catalogRes.status === 'fulfilled') {
+        const catalog = catalogRes.value.data?.data || catalogRes.value.data || {};
+        setPermissionGroups(normalizePermissionGroups(catalog.modules));
+        setDefaultTemplates(catalog.defaultTemplates || {});
       }
 
       const merged = (empList || []).map((emp) => {
@@ -172,7 +217,7 @@ export default function RoleCapabilityManager() {
   }, []);
 
   // When an employee is selected from directory
-  const selectUser = (emp) => {
+  function selectUser(emp) {
     setSelectedEmployee(emp);
     setJobTitle(emp.jobTitle || emp.override?.jobTitle || emp.designation || '');
     setReason(emp.override?.reason || 'Delegated operational authority by Company Admin');
@@ -180,7 +225,7 @@ export default function RoleCapabilityManager() {
 
     setGrantedPermissions(new Set(emp.override?.grantedPermissions || []));
     setRemovedPermissions(new Set(emp.override?.removedPermissions || []));
-  };
+  }
 
   // Base role permission check
   const isBaseInherited = (permKey) => {
@@ -320,7 +365,12 @@ export default function RoleCapabilityManager() {
 
       setIsRoleModalOpen(false);
       setEditingRoleId(null);
-      setRoleForm({ name: '', description: '', basedOnSystemRole: 'EMPLOYEE', permissions: [] });
+      setRoleForm({
+        name: '',
+        description: '',
+        basedOnSystemRole: 'EMPLOYEE',
+        permissions: [...(defaultTemplates.EMPLOYEE || [])],
+      });
       loadData(selectedEmployee?._id);
     } catch (err) {
       setFeedback({ type: 'error', text: err.response?.data?.message || 'Failed to save custom role.' });
@@ -328,6 +378,24 @@ export default function RoleCapabilityManager() {
       setSaving(false);
     }
   };
+
+  const applySystemRoleTemplate = (role) => {
+    const template = defaultTemplates[role] || [];
+    setRoleForm((current) => ({
+      ...current,
+      basedOnSystemRole: role,
+      permissions: [...template],
+    }));
+  };
+
+  const selectedRole = customRoles.find(
+    (role) => role._id === (selectedEmployee?.customRoleId?._id || selectedEmployee?.customRoleId)
+  );
+  const nextRole = customRoles.find((role) => role._id === assignedCustomRoleId);
+  const previousPermissions = new Set(selectedRole?.permissions || []);
+  const nextPermissions = new Set(nextRole?.permissions || []);
+  const addedRolePermissions = [...nextPermissions].filter((permission) => !previousPermissions.has(permission));
+  const removedRolePermissions = [...previousPermissions].filter((permission) => !nextPermissions.has(permission));
 
   const filteredEmployees = useMemo(() => {
     if (!searchQuery.trim()) return employees;
@@ -398,7 +466,12 @@ export default function RoleCapabilityManager() {
           <button
             onClick={() => {
               setEditingRoleId(null);
-              setRoleForm({ name: '', description: '', basedOnSystemRole: 'EMPLOYEE', permissions: [] });
+              setRoleForm({
+                name: '',
+                description: '',
+                basedOnSystemRole: 'EMPLOYEE',
+                permissions: [...(defaultTemplates.EMPLOYEE || [])],
+              });
               setIsRoleModalOpen(true);
             }}
             className="px-3.5 py-1.5 bg-[#8C5D17] hover:bg-[#784F14] text-white text-xs font-mono font-bold rounded cursor-pointer transition-colors shadow-2xs"
@@ -506,7 +579,7 @@ export default function RoleCapabilityManager() {
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 text-[11px] font-mono">
                       <span className="text-[#16233B]">
-                        Active Powers: <b>{PERMISSION_CATALOG.flatMap((g) => g.permissions).filter((p) => isPermissionActive(p.key)).length}</b>
+                        Active Powers: <b>{permissionGroups.flatMap((g) => g.permissions).filter((p) => isPermissionActive(p.key)).length}</b>
                       </span>
                       <span className="text-[#1E7E34]">
                         Extra Granted: <b>+{grantedPermissions.size}</b>
@@ -525,6 +598,33 @@ export default function RoleCapabilityManager() {
                   >
                     {saving ? 'SAVING POWERS...' : 'SAVE CAPABILITIES'}
                   </button>
+                </div>
+
+                <div className="rounded border border-[#D8D3C7] bg-[#FFFDF8] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">
+                      WHAT WILL CHANGE FOR THIS EMPLOYEE
+                    </h3>
+                    <span className="text-[10px] font-mono text-[#728294]">
+                      {assignedCustomRoleId === (selectedRole?._id || '') && addedRolePermissions.length === 0 && removedRolePermissions.length === 0
+                        ? 'No pending role change'
+                        : 'Pending assignment'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#16233B] mt-2">
+                    {assignedCustomRoleId
+                      ? `${nextRole?.name || 'Selected role'} will ${selectedRole ? 'replace' : 'give'} ${selectedRole ? `${selectedRole.name}'s` : 'the employee a'} permission bundle.`
+                      : selectedRole
+                        ? `${selectedRole.name} will be removed and the employee will return to their system role defaults.`
+                        : 'The employee will keep their system role defaults.'}
+                  </p>
+                  {(addedRolePermissions.length > 0 || removedRolePermissions.length > 0) && (
+                    <p className="text-[11px] text-[#5B6B79] mt-1">
+                      {addedRolePermissions.length > 0 && `Adds ${addedRolePermissions.length} permission${addedRolePermissions.length === 1 ? '' : 's'}`}
+                      {addedRolePermissions.length > 0 && removedRolePermissions.length > 0 ? ' and ' : ''}
+                      {removedRolePermissions.length > 0 && `removes ${removedRolePermissions.length} permission${removedRolePermissions.length === 1 ? '' : 's'}`}.
+                    </p>
+                  )}
                 </div>
 
                 {/* 1. Custom Role Selector & Designation Strip */}
@@ -608,7 +708,7 @@ export default function RoleCapabilityManager() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {PERMISSION_CATALOG.map((group) => {
+                    {permissionGroups.map((group) => {
                       const allKeys = group.permissions.map((p) => p.key);
                       const activeCount = allKeys.filter((k) => isPermissionActive(k)).length;
                       const isAllSelected = activeCount === allKeys.length;
@@ -819,28 +919,44 @@ export default function RoleCapabilityManager() {
                     Assign Permissions Bundle ({roleForm.permissions.length} Selected)
                   </label>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto p-2.5 border border-[#D8D3C7] rounded bg-[#FAF8F5]">
-                  {PERMISSION_CATALOG.flatMap((g) => g.permissions).map((perm) => (
-                    <label key={perm.key} className="flex items-center gap-2 p-1.5 bg-white border border-[#EFECE6] rounded cursor-pointer hover:border-[#8C5D17]">
-                      <input
-                        type="checkbox"
-                        checked={roleForm.permissions.includes(perm.key)}
-                        onChange={() => {
-                          const exists = roleForm.permissions.includes(perm.key);
-                          setRoleForm({
-                            ...roleForm,
-                            permissions: exists
-                              ? roleForm.permissions.filter((p) => p !== perm.key)
-                              : [...roleForm.permissions, perm.key],
-                          });
-                        }}
-                        className="accent-[#8C5D17]"
-                      />
-                      <div className="truncate">
-                        <span className="block font-bold text-[11px] text-[#16233B]">{perm.label}</span>
-                        <span className="block font-mono text-[9px] text-[#728294]">{perm.key}</span>
+                <select
+                  value={roleForm.basedOnSystemRole}
+                  onChange={(e) => applySystemRoleTemplate(e.target.value)}
+                  className="w-full mb-2 p-2 border border-[#D8D3C7] rounded outline-none focus:border-[#8C5D17]"
+                >
+                  {Object.keys(defaultTemplates).map((role) => (
+                    <option key={role} value={role}>Start from {role.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+                <div className="space-y-3 max-h-[360px] overflow-y-auto p-2.5 border border-[#D8D3C7] rounded bg-[#FAF8F5]">
+                  {permissionGroups.map((group) => (
+                    <fieldset key={group.key || group.category} className="bg-white border border-[#EFECE6] rounded p-2.5">
+                      <legend className="px-1 text-[10px] font-mono font-bold uppercase tracking-wider text-[#5B6B79]">{group.category}</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                        {group.permissions.map((perm) => (
+                          <label key={perm.key} className="flex items-center gap-2 p-1.5 border border-[#EFECE6] rounded cursor-pointer hover:border-[#8C5D17]">
+                            <input
+                              type="checkbox"
+                              checked={roleForm.permissions.includes(perm.key)}
+                              onChange={() => {
+                                const exists = roleForm.permissions.includes(perm.key);
+                                setRoleForm({
+                                  ...roleForm,
+                                  permissions: exists
+                                    ? roleForm.permissions.filter((p) => p !== perm.key)
+                                    : [...roleForm.permissions, perm.key],
+                                });
+                              }}
+                              className="accent-[#8C5D17]"
+                            />
+                            <div className="truncate">
+                              <span className="block font-bold text-[11px] text-[#16233B]">{perm.label}</span>
+                              <span className="block font-mono text-[9px] text-[#728294]">{perm.key}</span>
+                            </div>
+                          </label>
+                        ))}
                       </div>
-                    </label>
+                    </fieldset>
                   ))}
                 </div>
               </div>

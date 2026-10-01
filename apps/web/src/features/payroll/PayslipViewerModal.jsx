@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { apiClient } from '../../lib/apiClient.js';
 
 export default function PayslipViewerModal({ slip, onClose, onAdjustmentTriggered }) {
@@ -23,6 +23,7 @@ export default function PayslipViewerModal({ slip, onClose, onAdjustmentTriggere
   const totalDeductions = Number(slip.totalDeductions || deductions.totalDeductions || (attendanceDeduction + unpaidLeaveDeduction + loanEmi + tax));
 
   const netPay = Number(slip.netPay || Math.max(0, grossPay - totalDeductions));
+  const isLocked = ['APPROVED', 'PAID'].includes(String(slip.status || '').toUpperCase());
 
   const handleDownloadPdf = async () => {
     try {
@@ -45,7 +46,7 @@ export default function PayslipViewerModal({ slip, onClose, onAdjustmentTriggere
       } else {
         window.print();
       }
-    } catch (err) {
+    } catch {
       setFeedback({
         text: 'Cloud PDF engine offline. Direct print view ready.',
         ok: false,
@@ -206,12 +207,12 @@ export default function PayslipViewerModal({ slip, onClose, onAdjustmentTriggere
         {/* Footer Controls */}
         <div className="px-6 py-3.5 border-t border-[#E3DED4] bg-[#FAF8F5] flex justify-between items-center">
           <div className="flex gap-2">
-            {onAdjustmentTriggered && (
+            {onAdjustmentTriggered && isLocked && (
               <button
                 onClick={() => onAdjustmentTriggered(slip)}
                 className="px-3 py-1.5 bg-[#FAF8F5] border border-[#D8D3C7] text-xs font-mono font-bold text-[#8C5D17] rounded cursor-pointer hover:bg-[#FAF4E8]"
               >
-                + Post-Approval Adjustment
+                + POST-APPROVAL ADJUSTMENT
               </button>
             )}
           </div>
